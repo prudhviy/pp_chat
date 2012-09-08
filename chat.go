@@ -29,45 +29,62 @@ var numCores = flag.Int("n", runtime.NumCPU(), "number of CPU cores to use")
 var testPageHTML = `<!DOCTYPE html>
 <html>
 <head>
+    <title>Chat Room</title>
     <script type="text/javascript" src="./jquery.js"></script>
     <script type="text/javascript">
-        $("#start_chat").live('click', function(event){
+        var pp = pp || {};
+        pp.chat = pp.chat || {};
+        pp.chat.join = function(comm_id) {
             $.ajax({
                 type: 'POST',
-                data: {'user_name': $('#user_name').val()},
-                url: '/chat',
+                data: {'comm_id': comm_id},
+                url: '/chat/join/',
                 success: function(res){
                     console.log('success');
                 }
             });
+        };
+        $("#join_chat").live('click', function(event){
+            pp.chat.join($("#user_id").val());
         });
     </script>
 </head>
 <body>
     <form>
-        <label>User name</label>
-        <input id="user_name" type="text">
-        <input id="start_chat" value="Start Chat"type="button">
+        <label>User ID:</label>
+        <input id="user_id" type="text">
+        <input id="join_chat" value="Join Chat!" type="button">
     </form>
+    <span>Online Users</span>
+    <div>
+    %s
+    </div>
 </body>
 </html>
 `
 
-type Chann struct {
-    out chan string
-} 
+type commEntity struct {
+    id string
+    recv chan string
+    status string
+}
 
-var userChan map[string]Chann = make(map[string]Chann)
+//var room map[string]Chann = make(map[string]Chann)
+
+var users []commEntity = make([]commEntity, 10)
+
+func getTestData() ([]commEntity) {
+    return users
+}
 
 func testPage(w http.ResponseWriter, req *http.Request) {
-    w.Header().Set("Server", "goclubby/0.1")
     w.Header().Set("Cache-Control", "no-cache")
     w.Header().Set("Content-Type", "text/html; charset=iso-8859-1")
+
     io.WriteString(w, testPageHTML)
 }
 
 func jquery(w http.ResponseWriter, req *http.Request) {
-    w.Header().Set("Server", "goclubby/0.1")
     w.Header().Set("Cache-Control", "no-cache")
     w.Header().Set("Content-Type", "application/javascript; charset=iso-8859-1")
 
@@ -83,26 +100,40 @@ func jquery(w http.ResponseWriter, req *http.Request) {
 func chat(w http.ResponseWriter, req *http.Request) {
     var err error
     
-    w.Header().Set("Server", "goclubby/0.1")
     w.Header().Set("Cache-Control", "no-cache")
     w.Header().Set("Content-Type", "application/javascript")
+    
     response := "response 1"
 
-    user_chan := new(Chann)
-    out_chan := make(chan string)
-    (*user_chan).out = out_chan
-    userChan["user_a"] = *user_chan
-
-    for resource := range out_chan {
+    /*for resource := range out_chan {
         fmt.Printf("got chat %s", resource)
-    }
+    }*/
 
-    fmt.Printf("%s", req)
+    
     io.WriteString(w, response)
     if err == nil {
         fmt.Printf("Response sent- %s %s\n", req.URL, time.Now())
     }
 }
+
+func joinChat(w http.ResponseWriter, req *http.Request) {
+    var err error
+    
+    w.Header().Set("Cache-Control", "no-cache")
+    w.Header().Set("Content-Type", "text/html")
+
+    /*recv := make(chan string)
+    var newUser commEntity
+    commEntity.id = 'sjjs'*/
+
+    fmt.Printf("###\n %s and %v\n###\n",
+                                req.URL.Path, req)
+    io.WriteString(w, "joined")
+    if err == nil {
+        fmt.Printf("Response sent- %s %s\n", req.URL, time.Now())
+    }   
+}
+
 
 func main() {
     // make sure app uses all cores
@@ -114,6 +145,7 @@ func main() {
 
     http.HandleFunc("/", testPage)
     http.HandleFunc("/chat", chat)
+    http.HandleFunc("/chat/join/", joinChat)
     http.HandleFunc("/jquery.js", jquery)
     err := http.ListenAndServe("0.0.0.0:8000", nil)
     if err != nil {
