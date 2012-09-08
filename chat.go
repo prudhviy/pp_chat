@@ -66,12 +66,12 @@ var testPageHTML = `<!DOCTYPE html>
 type commEntity struct {
     id string
     recv chan string
-    status string
+    //status string
 }
 
 //var room map[string]Chann = make(map[string]Chann)
 
-var users []commEntity = make([]commEntity, 10)
+var users []commEntity = make([]commEntity, 0)
 
 func getTestData() ([]commEntity) {
     return users
@@ -104,11 +104,6 @@ func chat(w http.ResponseWriter, req *http.Request) {
     w.Header().Set("Content-Type", "application/javascript")
     
     response := "response 1"
-
-    /*for resource := range out_chan {
-        fmt.Printf("got chat %s", resource)
-    }*/
-
     
     io.WriteString(w, response)
     if err == nil {
@@ -116,24 +111,34 @@ func chat(w http.ResponseWriter, req *http.Request) {
     }
 }
 
+func openPushChannel(comm_id string) {
+    fmt.Printf("###\nJoin Chat > user-id:%v\n###\n", comm_id)
+    var newUser commEntity
+
+    newUser.id = comm_id
+    newUser.recv = make(chan string)
+    users = append(users, newUser)
+    
+    for resource := range newUser.recv {
+        fmt.Printf("got chat %s", resource)
+    }
+}
+
+
 func joinChat(w http.ResponseWriter, req *http.Request) {
     var err error
     
     w.Header().Set("Cache-Control", "no-cache")
     w.Header().Set("Content-Type", "text/html")
 
-    /*recv := make(chan string)
-    var newUser commEntity
-    commEntity.id = 'sjjs'*/
+    fmt.Printf("###\nList of online Users > user-id:%v\n###\n", users)
+    openPushChannel(req.FormValue("comm_id"))
 
-    fmt.Printf("###\n %s and %v\n###\n",
-                                req.URL.Path, req)
     io.WriteString(w, "joined")
     if err == nil {
         fmt.Printf("Response sent- %s %s\n", req.URL, time.Now())
-    }   
+    }
 }
-
 
 func main() {
     // make sure app uses all cores
