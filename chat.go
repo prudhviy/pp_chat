@@ -13,6 +13,7 @@ import (
     //"crypto/md5"
     //"hash"
 
+    //"html/template"
     "log"
     "fmt"
     //"strings"
@@ -40,25 +41,46 @@ var testPageHTML = `<!DOCTYPE html>
                 data: {'comm_id': comm_id},
                 url: '/chat/join/',
                 success: function(res){
-                    console.log('success');
+                    $('.log').html(res);
+                    pp.chat.join(comm_id);
+                }
+            });
+        };
+        pp.chat.send_msg = function(comm_id, msg) {
+            $.ajax({
+                type: 'POST',
+                data: {'comm_id': comm_id, 'msg': msg},
+                url: '/chat/message/',
+                success: function(res){
+                    console.log('msg sent');
                 }
             });
         };
         $("#join_chat").live('click', function(event){
             pp.chat.join($("#user_id").val());
         });
+        $("#send_msg").live('click', function(event){
+            pp.chat.send_msg($("#recv_id").val(), $("#recv_msg").val());
+        });
     </script>
 </head>
 <body>
     <form>
-        <label>User ID:</label>
-        <input id="user_id" type="text">
-        <input id="join_chat" value="Join Chat!" type="button">
+        <ul>
+        <li>
+            <label>User ID:</label>
+            <input id="user_id" type="text">
+            <input id="join_chat" value="Join Chat!" type="button">
+        </li>
+        <li>
+            <label>Recepient User ID:</label>
+            <input id="recv_id" type="text">
+            <label>Message:</label>
+            <input id="recv_msg" type="text">
+            <input id="send_msg" value="Send Message!" type="button">
+        </li>
+        <li>Log:<span class="log"></span></li>
     </form>
-    <span>Online Users</span>
-    <div>
-    %s
-    </div>
 </body>
 </html>
 `
@@ -71,16 +93,16 @@ type commEntity struct {
 
 //var room map[string]Chann = make(map[string]Chann)
 
-var users []commEntity = make([]commEntity, 0)
+var users map[string]commEntity = make(map[string]commEntity)
 
-func getTestData() ([]commEntity) {
+/*func getTestData() ([string]commEntity) {
     return users
-}
+}*/
 
 func testPage(w http.ResponseWriter, req *http.Request) {
     w.Header().Set("Cache-Control", "no-cache")
     w.Header().Set("Content-Type", "text/html; charset=iso-8859-1")
-
+        
     io.WriteString(w, testPageHTML)
 }
 
@@ -97,13 +119,19 @@ func jquery(w http.ResponseWriter, req *http.Request) {
     io.WriteString(w, string(resourceData))
 }
 
-func chat(w http.ResponseWriter, req *http.Request) {
+func sendMessage(w http.ResponseWriter, req *http.Request) {
     var err error
     
     w.Header().Set("Cache-Control", "no-cache")
     w.Header().Set("Content-Type", "application/javascript")
     
-    response := "response 1"
+    response := "message sent"
+
+    recepientUserId := req.FormValue("comm_id")
+    chatMessage := req.FormValue("msg")
+
+    cEntity := users[recepientUserId]
+    cEntity.recv <- chatMessage
     
     io.WriteString(w, response)
     if err == nil {
@@ -111,19 +139,22 @@ func chat(w http.ResponseWriter, req *http.Request) {
     }
 }
 
-func openPushChannel(comm_id string) {
-    fmt.Printf("###\nJoin Chat > user-id:%v\n###\n", comm_id)
+func openPushChannel(comm_id string) (msg string) {
+    fmt.Printf("\nJoin Chat > user-id:%v\n", comm_id)
     var newUser commEntity
 
     newUser.id = comm_id
     newUser.recv = make(chan string)
-    users = append(users, newUser)
+    users[newUser.id] = newUser
     
-    for resource := range newUser.recv {
-        fmt.Printf("got chat %s", resource)
+    for newMessage := range newUser.recv {
+        fmt.Printf("\ngot chat %s\n", newMessage)
+        msg = newMessage
+        close(newUser.recv)
     }
-}
 
+    return
+}
 
 func joinChat(w http.ResponseWriter, req *http.Request) {
     var err error
@@ -131,10 +162,9 @@ func joinChat(w http.ResponseWriter, req *http.Request) {
     w.Header().Set("Cache-Control", "no-cache")
     w.Header().Set("Content-Type", "text/html")
 
-    fmt.Printf("###\nList of online Users > user-id:%v\n###\n", users)
-    openPushChannel(req.FormValue("comm_id"))
+    msg := openPushChannel(req.FormValue("comm_id"))
 
-    io.WriteString(w, "joined")
+    io.WriteString(w, msg)
     if err == nil {
         fmt.Printf("Response sent- %s %s\n", req.URL, time.Now())
     }
@@ -149,9 +179,10 @@ func main() {
                "http://0.0.0.0:8000 on %d CPU cores\n", *numCores)
 
     http.HandleFunc("/", testPage)
-    http.HandleFunc("/chat", chat)
-    http.HandleFunc("/chat/join/", joinChat)
     http.HandleFunc("/jquery.js", jquery)
+    http.HandleFunc("/chat/join/", joinChat)
+    http.HandleFunc("/chat/message/", sendMessage)
+
     err := http.ListenAndServe("0.0.0.0:8000", nil)
     if err != nil {
         log.Fatal("In main(): ", err)
