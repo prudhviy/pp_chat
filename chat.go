@@ -42,8 +42,11 @@ var testPageHTML = `<!DOCTYPE html>
                 url: '/chat/join/',
                 success: function(res){
                     $('.log').html(res);
+                },
+                complete: function(){
                     pp.chat.join(comm_id);
-                }
+                },
+                timeout: 8000
             });
         };
         pp.chat.send_msg = function(comm_id, msg) {
@@ -139,21 +142,30 @@ func sendMessage(w http.ResponseWriter, req *http.Request) {
     }
 }
 
-func openPushChannel(comm_id string) (msg string) {
+func openPushChannel(comm_id string) (chan string) {
     fmt.Printf("\nJoin Chat > user-id:%v\n", comm_id)
     var newUser commEntity
 
     newUser.id = comm_id
     newUser.recv = make(chan string)
     users[newUser.id] = newUser
-    
-    for newMessage := range newUser.recv {
-        fmt.Printf("\ngot chat %s\n", newMessage)
-        msg = newMessage
-        close(newUser.recv)
+
+    return newUser.recv
+}
+
+func getChatMessage(recv chan string) (msg string) {
+
+    timeout := time.After(12 * time.Second)
+    select {
+        case newMessage := <-recv:
+            fmt.Printf("\ngot chat %s\n", newMessage)
+            msg = newMessage
+        case currentTime := <-timeout:
+            msg = "timeout"
+            fmt.Printf("\nServer timeout %s\n", currentTime)
     }
 
-    return
+    return msg
 }
 
 func joinChat(w http.ResponseWriter, req *http.Request) {
@@ -162,9 +174,10 @@ func joinChat(w http.ResponseWriter, req *http.Request) {
     w.Header().Set("Cache-Control", "no-cache")
     w.Header().Set("Content-Type", "text/html")
 
-    msg := openPushChannel(req.FormValue("comm_id"))
+    recv := openPushChannel(req.FormValue("comm_id"))
+    newMessage := getChatMessage(recv)
 
-    io.WriteString(w, msg)
+    io.WriteString(w, newMessage)
     if err == nil {
         fmt.Printf("Response sent- %s %s\n", req.URL, time.Now())
     }
