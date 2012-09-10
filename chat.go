@@ -41,7 +41,8 @@ var testPageHTML = `<!DOCTYPE html>
                 data: {'comm_id': comm_id},
                 url: '/chat/join/',
                 success: function(res){
-                    $('.log').html(res);
+                    var ele = '<li>' + res + '</li>'
+                    $('.log').append($(ele));
                 },
                 complete: function(){
                     pp.chat.join(comm_id);
@@ -82,7 +83,8 @@ var testPageHTML = `<!DOCTYPE html>
             <input id="recv_msg" type="text">
             <input id="send_msg" value="Send Message!" type="button">
         </li>
-        <li>Log:<span class="log"></span></li>
+        </ul>
+        <div>Log:<ul class="log"></ul></div>
     </form>
 </body>
 </html>
