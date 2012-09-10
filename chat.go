@@ -145,14 +145,22 @@ func sendMessage(w http.ResponseWriter, req *http.Request) {
 }
 
 func openPushChannel(comm_id string) (chan string) {
-    fmt.Printf("\nJoin Chat > user-id:%v\n", comm_id)
     var newUser commEntity
+    var userRecvChannel chan string
 
-    newUser.id = comm_id
-    newUser.recv = make(chan string)
-    users[newUser.id] = newUser
+    _, exists := users[comm_id]
+    if exists {
+        fmt.Printf("\nAlready joined > user-id:%v\n", comm_id)
+        userRecvChannel = users[comm_id].recv
+    } else {
+        fmt.Printf("\nJoin Chat > user-id:%v\n", comm_id)
+        newUser.id = comm_id
+        newUser.recv = make(chan string)
+        users[newUser.id] = newUser
+        userRecvChannel = newUser.recv
+    }
 
-    return newUser.recv
+    return userRecvChannel
 }
 
 func getChatMessage(recv chan string) (msg string) {
