@@ -36,18 +36,20 @@ var testPageHTML = `<!DOCTYPE html>
         var pp = pp || {};
         pp.chat = pp.chat || {};
         pp.chat.join = function(comm_id) {
+            var join_time = Math.round((new Date()).getTime() / 1000);
             $.ajax({
                 type: 'POST',
-                data: {'comm_id': comm_id},
+                data: {'comm_id': comm_id, 'join_time': join_time},
                 url: '/chat/join/',
                 success: function(res){
                     var ele = '<li>' + res + '</li>'
                     $('.log').append($(ele));
                 },
                 complete: function(){
+                    console.log('close conn', join_time);
                     pp.chat.join(comm_id);
                 },
-                timeout: 8000
+                timeout: 10000
             });
         };
         pp.chat.send_msg = function(comm_id, msg) {
@@ -125,7 +127,7 @@ func jquery(w http.ResponseWriter, req *http.Request) {
 }
 
 func sendMessage(w http.ResponseWriter, req *http.Request) {
-    var err error
+    //var err error
     
     w.Header().Set("Cache-Control", "no-cache")
     w.Header().Set("Content-Type", "application/javascript")
@@ -139,21 +141,21 @@ func sendMessage(w http.ResponseWriter, req *http.Request) {
     cEntity.recv <- chatMessage
     
     io.WriteString(w, response)
-    if err == nil {
+    /*if err == nil {
         fmt.Printf("Response sent- %s %s\n", req.URL, time.Now())
-    }
+    }*/
 }
 
-func openPushChannel(comm_id string) (chan string) {
+func openPushChannel(comm_id string, join_time string) (chan string) {
     var newUser commEntity
     var userRecvChannel chan string
 
     _, exists := users[comm_id]
     if exists {
-        fmt.Printf("\nAlready joined > user-id:%v\n", comm_id)
+        fmt.Printf("Already joined> User-id:%v %v\n", comm_id, join_time)
         userRecvChannel = users[comm_id].recv
     } else {
-        fmt.Printf("\nJoin Chat > user-id:%v\n", comm_id)
+        fmt.Printf("Join Chat> User-id:%v %v\n", comm_id, join_time)
         newUser.id = comm_id
         newUser.recv = make(chan string)
         users[newUser.id] = newUser
@@ -165,31 +167,33 @@ func openPushChannel(comm_id string) (chan string) {
 
 func getChatMessage(recv chan string) (msg string) {
 
-    timeout := time.After(12 * time.Second)
+    timeout := time.After(5 * time.Second)
     select {
         case newMessage := <-recv:
-            fmt.Printf("\ngot chat %s\n", newMessage)
             msg = newMessage
-        case currentTime := <-timeout:
+        case <-timeout:
             msg = "timeout"
-            fmt.Printf("\nServer timeout %s\n", currentTime)
     }
 
     return msg
 }
 
 func joinChat(w http.ResponseWriter, req *http.Request) {
-    var err error
     
     w.Header().Set("Cache-Control", "no-cache")
     w.Header().Set("Content-Type", "text/html")
 
-    recv := openPushChannel(req.FormValue("comm_id"))
+    recv := openPushChannel(req.FormValue("comm_id"), req.FormValue("join_time"))
     newMessage := getChatMessage(recv)
 
-    io.WriteString(w, newMessage)
-    if err == nil {
-        fmt.Printf("Response sent- %s %s\n", req.URL, time.Now())
+    if newMessage == "timeout" {
+        /*conn, _, _ := w.(http.Hijacker).Hijack()
+        fmt.Printf("Timeout- close conn> User-id:%s %s %T\n", req.FormValue("comm_id"), req.FormValue("join_time"), conn)
+        conn.Close()*/
+        response.Body.Close?
+    } else {
+        io.WriteString(w, newMessage)
+        fmt.Printf("Chat sent> User-id:%s %s %s\n", req.FormValue("comm_id"), req.FormValue("join_time"), newMessage)
     }
 }
 
