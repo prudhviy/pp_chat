@@ -8,7 +8,6 @@ import (
     //"bytes"
     "net/http"
     "os"
-    //"os/exec"
     
     //"crypto/md5"
     //"hash"
@@ -47,9 +46,9 @@ var testPageHTML = `<!DOCTYPE html>
                 },
                 complete: function(){
                     console.log('close conn', join_time);
-                    pp.chat.join(comm_id);
+                    //pp.chat.join(comm_id);
                 },
-                timeout: 10000
+                timeout: 60000
             });
         };
         pp.chat.send_msg = function(comm_id, msg) {
@@ -161,20 +160,18 @@ func openPushChannel(comm_id string, join_time string) (chan string) {
         users[newUser.id] = newUser
         userRecvChannel = newUser.recv
     }
-
     return userRecvChannel
 }
 
 func getChatMessage(recv chan string) (msg string) {
-
     timeout := time.After(5 * time.Second)
     select {
         case newMessage := <-recv:
             msg = newMessage
         case <-timeout:
+            fmt.Printf("timeout yes\n")
             msg = "timeout"
     }
-
     return msg
 }
 
@@ -183,14 +180,15 @@ func joinChat(w http.ResponseWriter, req *http.Request) {
     w.Header().Set("Cache-Control", "no-cache")
     w.Header().Set("Content-Type", "text/html")
 
+    fmt.Printf("JoinChat method> User-id:%s\n", req.FormValue("comm_id"))
     recv := openPushChannel(req.FormValue("comm_id"), req.FormValue("join_time"))
     newMessage := getChatMessage(recv)
 
     if newMessage == "timeout" {
-        /*conn, _, _ := w.(http.Hijacker).Hijack()
+        conn, _, _ := w.(http.Hijacker).Hijack()
         fmt.Printf("Timeout- close conn> User-id:%s %s %T\n", req.FormValue("comm_id"), req.FormValue("join_time"), conn)
-        conn.Close()*/
-        response.Body.Close?
+        conn.Close()
+        //response.Body.Close?
     } else {
         io.WriteString(w, newMessage)
         fmt.Printf("Chat sent> User-id:%s %s %s\n", req.FormValue("comm_id"), req.FormValue("join_time"), newMessage)
