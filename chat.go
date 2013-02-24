@@ -50,7 +50,7 @@ var testPageHTML = `<!DOCTYPE html>
                     console.log('close conn', join_time);
                     //pp.chat.join(comm_id);
                 },
-                timeout: 15000
+                timeout: 60000
             });
         };
         pp.chat.send_msg = function(comm_id, msg) {
@@ -167,13 +167,13 @@ func openPushChannel(comm_id string, join_time string) chan string {
 }
 
 func getChatMessage(recv chan string) (msg string) {
-	timeout := time.After(10 * time.Second)
+	timeout := time.After(60 * time.Second)
 	select {
-	case newMessage := <-recv:
-		msg = newMessage
-	case <-timeout:
-		fmt.Printf("timeout yes\n")
-		msg = "timeout"
+		case newMessage := <-recv:
+			msg = newMessage
+		case <-timeout:
+			fmt.Printf("timeout yes\n")
+			msg = "timeout"
 	}
 	return msg
 }
@@ -183,9 +183,9 @@ func joinChat(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Content-Type", "text/html")
 
-	fmt.Printf("JoinChat method> User-id:%s\n", req.FormValue("comm_id"))
+	//fmt.Printf("JoinChat method> User-id:%s\n", req.FormValue("comm_id"))
 	recv := openPushChannel(req.FormValue("comm_id"),
-		req.FormValue("join_time"))
+								req.FormValue("join_time"))
 	newMessage := getChatMessage(recv)
 
 	if newMessage == "timeout" {
@@ -194,23 +194,25 @@ func joinChat(w http.ResponseWriter, req *http.Request) {
 			http.Error(w, "webserver doesn't support hijacking",
 				http.StatusInternalServerError)
 		}
+		// hijack http connection to tcp
 		hjConn, bufrw, err := hj.Hijack()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 		defer hjConn.Close()
+		// listen if client has closed the connection
 		bs, _ := bufrw.Reader.Peek(1)
 		if len(bs) == 0 {
 			fmt.Printf("client conn closed\n")
 		}
 		bufrw.Flush()
 		fmt.Printf("Timeout- close conn> User-id:%s %s %T\n",
-			req.FormValue("comm_id"),
-			req.FormValue("join_time"), hjConn)
+							req.FormValue("comm_id"),
+							req.FormValue("join_time"), hjConn)
 	} else {
 		io.WriteString(w, newMessage)
 		fmt.Printf("Chat sent> User-id:%s %s %s\n", req.FormValue("comm_id"),
-			req.FormValue("join_time"), newMessage)
+						req.FormValue("join_time"), newMessage)
 	}
 }
 
