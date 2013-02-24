@@ -5,7 +5,9 @@ import (
 
 	"io"
 	"io/ioutil"
+	"bufio"
 	//"bytes"
+	"net"
 	"net/http"
 	"os"
 
@@ -172,7 +174,6 @@ func getChatMessage(recv chan string) (msg string) {
 		case newMessage := <-recv:
 			msg = newMessage
 		case <-timeout:
-			fmt.Printf("timeout yes\n")
 			msg = "timeout"
 	}
 	return msg
@@ -182,39 +183,55 @@ func joinChat(w http.ResponseWriter, req *http.Request) {
 
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Content-Type", "text/html")
-
 	//fmt.Printf("JoinChat method> User-id:%s\n", req.FormValue("comm_id"))
 	recv := openPushChannel(req.FormValue("comm_id"),
 								req.FormValue("join_time"))
+
+	hjConn, bufrw := httpHijack(w)
+	defer hjConn.Close()
+	go is_client_disconnected(bufrw, recv)
 	newMessage := getChatMessage(recv)
 
 	if newMessage == "timeout" {
-		hj, ok := w.(http.Hijacker)
-		if !ok {
-			http.Error(w, "webserver doesn't support hijacking",
-				http.StatusInternalServerError)
-		}
-		// hijack http connection to tcp
-		hjConn, bufrw, err := hj.Hijack()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		defer hjConn.Close()
-		// listen if client has closed the connection
-		bs, _ := bufrw.Reader.Peek(1)
-		if len(bs) == 0 {
-			fmt.Printf("client conn closed\n")
-		}
-		bufrw.Flush()
-		fmt.Printf("Timeout- close conn> User-id:%s %s %T\n",
-							req.FormValue("comm_id"),
-							req.FormValue("join_time"), hjConn)
+		fmt.Printf("server timed out\n")
+	} else if newMessage == "client_closed" {
+		fmt.Printf("closed conn> User-id:%s %s \n",
+					req.FormValue("comm_id"),
+					req.FormValue("join_time"))
 	} else {
-		io.WriteString(w, newMessage)
-		fmt.Printf("Chat sent> User-id:%s %s %s\n", req.FormValue("comm_id"),
+		//io.WriteString(w, newMessage)
+		bufrw.WriteString("Now we're speaking raw TCP. Say hi: ")
+		fmt.Printf("Chat sent to> User-id:%s %s %s\n", req.FormValue("comm_id"),
 						req.FormValue("join_time"), newMessage)
 	}
+	bufrw.Flush()
+	fmt.Printf("after bufrw flush\n")
 }
+
+func is_client_disconnected(bufrw *bufio.ReadWriter, recv chan string) {
+	// listen if client has closed the connection
+	bs, _ := bufrw.Reader.Peek(1)
+	if len(bs) == 0 {
+		fmt.Printf("client has closed connection\n")
+		recv <- "client_closed"
+	}
+}
+
+func httpHijack(w http.ResponseWriter) (net.Conn, *bufio.ReadWriter) {
+	hj, ok := w.(http.Hijacker)
+	if !ok {
+		http.Error(w, "webserver doesn't support hijacking",
+			http.StatusInternalServerError)
+	}
+	// hijack http connection to tcp
+	hjConn, bufrw, err := hj.Hijack()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+
+	return hjConn, bufrw
+}
+
 
 func main() {
 	// make sure app uses all cores
