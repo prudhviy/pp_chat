@@ -50,9 +50,9 @@ var testPageHTML = `<!DOCTYPE html>
                 },
                 complete: function(){
                     console.log('close conn', join_time);
-                    //pp.chat.join(comm_id);
+                    pp.chat.join(comm_id);
                 },
-                timeout: 60000
+                timeout: 20000
             });
         };
         pp.chat.send_msg = function(comm_id, msg) {
@@ -180,7 +180,7 @@ func getChatMessage(recv chan string) (msg string) {
 }
 
 func joinChat(w http.ResponseWriter, req *http.Request) {
-
+	
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Content-Type", "text/html")
 	//fmt.Printf("JoinChat method> User-id:%s\n", req.FormValue("comm_id"))
@@ -200,21 +200,24 @@ func joinChat(w http.ResponseWriter, req *http.Request) {
 					req.FormValue("join_time"))
 	} else {
 		//io.WriteString(w, newMessage)
-		bufrw.WriteString("Now we're speaking raw TCP. Say hi: ")
+		bufrw.WriteString(newMessage)
 		fmt.Printf("Chat sent to> User-id:%s %s %s\n", req.FormValue("comm_id"),
 						req.FormValue("join_time"), newMessage)
 	}
 	bufrw.Flush()
-	fmt.Printf("after bufrw flush\n")
 }
 
 func is_client_disconnected(bufrw *bufio.ReadWriter, recv chan string) {
 	// listen if client has closed the connection
-	bs, _ := bufrw.Reader.Peek(1)
-	if len(bs) == 0 {
-		fmt.Printf("client has closed connection\n")
-		recv <- "client_closed"
-		fmt.Printf("after client_closed message\n")
+	bs, err := bufrw.Reader.Peek(1)
+	if len(bs) == 0 && err != nil {
+		//fmt.Printf("error: %v %T %#v\n", err, err, err)
+		if _, ok := err.(*net.OpError); ok {
+			fmt.Printf("server side hjConn close\n")
+		} else {
+			fmt.Printf("client side hjConn close\n")
+			recv <- "client_closed"
+		}
 	}
 }
 
