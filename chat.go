@@ -47,10 +47,10 @@ var testPageHTML = `<!DOCTYPE html>
                     console.log(res);
                     var ele = '<li>' + res.toString() + '</li>'
                     $('.log').append($(ele));
+                    pp.chat.join(comm_id);
                 },
                 complete: function(){
                     console.log('close conn', join_time);
-                    pp.chat.join(comm_id);
                 },
                 timeout: 20000
             });
