@@ -214,6 +214,7 @@ func is_client_disconnected(bufrw *bufio.ReadWriter, recv chan string) {
 	if len(bs) == 0 {
 		fmt.Printf("client has closed connection\n")
 		recv <- "client_closed"
+		fmt.Printf("after client_closed message\n")
 	}
 }
 
