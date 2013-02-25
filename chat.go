@@ -47,10 +47,10 @@ var testPageHTML = `<!DOCTYPE html>
                     console.log(res);
                     var ele = '<li>' + res.toString() + '</li>'
                     $('.log').append($(ele));
-                    pp.chat.join(comm_id);
                 },
                 complete: function(){
                     console.log('close conn', join_time);
+                    pp.chat.join(comm_id);
                 },
                 timeout: 20000
             });
@@ -161,7 +161,7 @@ func openPushChannel(comm_id string, join_time string) chan string {
 	} else {
 		fmt.Printf("Join Chat> User-id:%v %v\n", comm_id, join_time)
 		newUser.id = comm_id
-		newUser.recv = make(chan string)
+		newUser.recv = make(chan string, 100)
 		users[newUser.id] = newUser
 		userRecvChannel = newUser.recv
 	}
