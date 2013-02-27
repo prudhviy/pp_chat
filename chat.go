@@ -40,7 +40,7 @@ var testPageHTML = `<!DOCTYPE html>
             var join_time = Math.round((new Date()).getTime() / 1000);
             $.ajax({
                 type: 'POST',
-                data: {'comm_id': comm_id, 'join_time': join_time},
+                data: {'comm_id': comm_id, 'join_time': join_time, 'project_id': 123},
                 url: '/chat/join/',
                 success: function(res){
                     console.log(typeof res);
