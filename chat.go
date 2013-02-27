@@ -49,7 +49,7 @@ var testPageHTML = `<!DOCTYPE html>
                     $('.log').append($(ele));
                 },
                 complete: function(){
-                    console.log('close conn', join_time);
+                    //console.log('close conn', join_time);
                     pp.chat.join(comm_id);
                 },
                 timeout: 20000
@@ -61,7 +61,8 @@ var testPageHTML = `<!DOCTYPE html>
                 data: {'comm_id': comm_id, 'msg': msg},
                 url: '/chat/message/',
                 success: function(res){
-                    console.log('msg sent');
+                	var x = 1;
+                    //console.log('msg sent');
                 }
             });
         };
@@ -99,6 +100,7 @@ type commEntity struct {
 	id   string
 	recv chan string
 	//status string
+	lastActiveSince int64
 }
 
 //var room map[string]Chann = make(map[string]Chann)
@@ -152,16 +154,28 @@ func sendMessage(w http.ResponseWriter, req *http.Request) {
 
 func openPushChannel(comm_id string, join_time string) chan string {
 	var newUser commEntity
+	var tempUser commEntity
 	var userRecvChannel chan string
+	var tempTime time.Time
+
+	tempTime = time.Now()
+	currentUnixTime := tempTime.Unix()
 
 	_, exists := users[comm_id]
 	if exists {
 		fmt.Printf("Already joined> User-id:%v %v\n", comm_id, join_time)
+		// work around for bug http://code.google.com/p/go/issues/detail?id=3117
+		tempUser = users[comm_id]
+		tempUser.lastActiveSince = currentUnixTime
+		users[comm_id] = tempUser
 		userRecvChannel = users[comm_id].recv
+
 	} else {
 		fmt.Printf("Join Chat> User-id:%v %v\n", comm_id, join_time)
 		newUser.id = comm_id
 		newUser.recv = make(chan string, 100)
+		newUser.lastActiveSince = currentUnixTime
+
 		users[newUser.id] = newUser
 		userRecvChannel = newUser.recv
 	}
