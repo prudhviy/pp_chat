@@ -18,7 +18,7 @@ import (
 	"log"
 	"fmt"
 	//"strings"
-	//"encoding/json"
+	"encoding/json"
 	//"encoding/hex"
 
 	"runtime"
@@ -40,12 +40,13 @@ var testPageHTML = `<!DOCTYPE html>
             var join_time = Math.round((new Date()).getTime() / 1000);
             $.ajax({
                 type: 'POST',
+                dataType: 'json',
                 data: {'comm_id': comm_id, 'join_time': join_time, 'project_id': 123},
                 url: '/chat/join/',
                 success: function(res){
                     console.log(typeof res);
                     console.log(res);
-                    var ele = '<li>' + res.toString() + '</li>'
+                    var ele = '<li>' + res.OnlineUsers + '</li>'
                     $('.log').append($(ele));
                 },
                 complete: function(){
@@ -103,6 +104,9 @@ type commEntity struct {
 	lastActiveSince int64
 }
 
+type PresenceMessage struct {
+    OnlineUsers string
+}
 //var room map[string]Chann = make(map[string]Chann)
 
 var users map[string]commEntity = make(map[string]commEntity)
@@ -194,7 +198,7 @@ func getChatMessage(recv chan string) (msg string) {
 }
 
 func joinChat(w http.ResponseWriter, req *http.Request) {
-	
+	var pMessage PresenceMessage
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Content-Type", "text/html")
 	//fmt.Printf("JoinChat method> User-id:%s\n", req.FormValue("comm_id"))
@@ -214,7 +218,11 @@ func joinChat(w http.ResponseWriter, req *http.Request) {
 					req.FormValue("join_time"))
 	} else {
 		//io.WriteString(w, newMessage)
-		bufrw.WriteString(newMessage)
+		pMessage.OnlineUsers = newMessage
+		marshalData, _ := json.Marshal(pMessage)
+		jsonResponse := string(marshalData)
+		fmt.Printf("json: %s %s\n", jsonResponse, marshalData)
+		bufrw.WriteString(jsonResponse)
 		fmt.Printf("Chat sent to> User-id:%s %s %s\n", req.FormValue("comm_id"),
 						req.FormValue("join_time"), newMessage)
 	}
