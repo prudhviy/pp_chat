@@ -61,6 +61,7 @@ var testPageHTML = `<!DOCTYPE html>
                 type: 'POST',
                 data: {'comm_id': comm_id, 'msg': msg},
                 url: 'http://presence.prudhviy.com/chat/message/',
+                timeout: 5000,
                 success: function(res){
                 	var x = 1;
                     //console.log('msg sent');
