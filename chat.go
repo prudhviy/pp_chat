@@ -42,7 +42,7 @@ var testPageHTML = `<!DOCTYPE html>
                 type: 'POST',
                 dataType: 'json',
                 data: {'comm_id': comm_id, 'join_time': join_time, 'project_id': 123},
-                url: '/chat/join/',
+                url: 'http://presence.prudhviy.com/chat/join/',
                 success: function(res){
                     console.log(typeof res);
                     console.log(res);
@@ -60,7 +60,7 @@ var testPageHTML = `<!DOCTYPE html>
             $.ajax({
                 type: 'POST',
                 data: {'comm_id': comm_id, 'msg': msg},
-                url: '/chat/message/',
+                url: 'http://presence.prudhviy.com/chat/message/',
                 success: function(res){
                 	var x = 1;
                     //console.log('msg sent');
