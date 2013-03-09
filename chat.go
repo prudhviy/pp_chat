@@ -42,7 +42,7 @@ var testPageHTML = `<!DOCTYPE html>
                 type: 'POST',
                 dataType: 'json',
                 data: {'comm_id': comm_id, 'join_time': join_time, 'project_id': 123},
-                url: 'http://presence.prudhviy.com/chat/join/',
+                url: '/chat/join/',
                 success: function(res){
                     console.log(typeof res);
                     console.log(res);
@@ -60,7 +60,7 @@ var testPageHTML = `<!DOCTYPE html>
             $.ajax({
                 type: 'POST',
                 data: {'comm_id': comm_id, 'msg': msg},
-                url: 'http://presence.prudhviy.com/chat/message/',
+                url: '/chat/message/',
                 timeout: 5000,
                 success: function(res){
                 	var x = 1;
@@ -200,6 +200,7 @@ func getChatMessage(recv chan string) (msg string) {
 
 func joinChat(w http.ResponseWriter, req *http.Request) {
 	var pMessage PresenceMessage
+	var newHeader http.Header = make(http.Header)
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Content-Type", "text/html")
 	//fmt.Printf("JoinChat method> User-id:%s\n", req.FormValue("comm_id"))
@@ -223,7 +224,15 @@ func joinChat(w http.ResponseWriter, req *http.Request) {
 		marshalData, _ := json.Marshal(pMessage)
 		jsonResponse := string(marshalData)
 		fmt.Printf("json: %s %s\n", jsonResponse, marshalData)
-		bufrw.WriteString(jsonResponse)
+
+		bufrw.WriteString("HTTP/1.1 200 OK" + "\r\n")
+		
+		newHeader.Add("Content-Type", "text/html; charset=UTF-8")
+		newHeader.Add("Cache-Control", "no-cache")
+		newHeader.Add("X-AppServer", "GoAPP")
+		_ = newHeader.Write(bufrw)
+
+		bufrw.WriteString(jsonResponse + "\r\n")
 		fmt.Printf("Chat sent to> User-id:%s %s %s\n", req.FormValue("comm_id"),
 						req.FormValue("join_time"), newMessage)
 	}
