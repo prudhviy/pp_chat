@@ -141,6 +141,7 @@ func jquery(w http.ResponseWriter, req *http.Request) {
 func sendMessage(w http.ResponseWriter, req *http.Request) {
 	//var err error
 
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Content-Type", "application/javascript")
 
