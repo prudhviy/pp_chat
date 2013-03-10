@@ -42,7 +42,7 @@ var testPageHTML = `<!DOCTYPE html>
             $.ajax({
                 type: 'POST',
                 dataType: 'json',
-                data: {'comm_id': comm_id, 'join_time': join_time, 'project_id': 123},
+                data: {'comm_id': comm_id, 'join_time': join_time, 'group_id': 123},
                 url: pp.chat.domain + '/chat/join/',
                 success: function(res){
                     console.log(typeof res);
@@ -102,6 +102,7 @@ var testPageHTML = `<!DOCTYPE html>
 type commEntity struct {
 	id   string
 	recv chan string
+	groupId string
 	//status string
 	lastActiveSince int64
 }
@@ -109,6 +110,7 @@ type commEntity struct {
 type PresenceMessage struct {
     OnlineUsers string
 }
+
 //var room map[string]Chann = make(map[string]Chann)
 
 var users map[string]commEntity = make(map[string]commEntity)
@@ -159,7 +161,7 @@ func sendMessage(w http.ResponseWriter, req *http.Request) {
 	}*/
 }
 
-func openPushChannel(comm_id string, join_time string) chan string {
+func openPushChannel(comm_id string, group_id string, join_time string) chan string {
 	var newUser commEntity
 	var tempUser commEntity
 	var userRecvChannel chan string
@@ -182,11 +184,22 @@ func openPushChannel(comm_id string, join_time string) chan string {
 		newUser.id = comm_id
 		newUser.recv = make(chan string, 100)
 		newUser.lastActiveSince = currentUnixTime
-
+		newUser.groupId = group_id
+		
 		users[newUser.id] = newUser
 		userRecvChannel = newUser.recv
+		// notify all users of the group about the new user
+		go notifyNewUserToGroup(comm_id, group_id)
 	}
 	return userRecvChannel
+}
+
+func notifyNewUserToGroup(comm_id string, group_id string) {
+	for _, userCommEntity := range users {
+		if userCommEntity.groupId == group_id && userCommEntity.id != comm_id {
+			userCommEntity.recv <- comm_id
+		}
+	}
 }
 
 func getChatMessage(recv chan string) (msg string) {
@@ -210,7 +223,7 @@ func joinChat(w http.ResponseWriter, req *http.Request) {
 	newHeader.Add("X-AppServer", "GoAPP")
 	
 	//fmt.Printf("JoinChat method> User-id:%s\n", req.FormValue("comm_id"))
-	recv := openPushChannel(req.FormValue("comm_id"),
+	recv := openPushChannel(req.FormValue("comm_id"), req.FormValue("group_id"), 
 								req.FormValue("join_time"))
 
 	hjConn, bufrw := httpHijack(w)
@@ -254,7 +267,7 @@ func notifyClientDisconnect(bufrw *bufio.ReadWriter, recv chan string) {
 		if _, ok := err.(*net.OpError); ok {
 			fmt.Printf("server side hjConn close\n")
 		} else {
-			fmt.Printf("client side hjConn close\n")
+			//fmt.Printf("client side hjConn close\n")
 			recv <- "client_closed"
 		}
 	}
