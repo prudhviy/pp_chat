@@ -35,15 +35,37 @@ type commEntity struct {
 	lastActiveSince int64
 }
 
-type concurrentUsersMap struct {
-	sync.RWMutex
+type ConcurrentUsersMap struct {
+	mu sync.RWMutex
 	m map[string]commEntity
 }
 
-//var users = concurrentUsersMap{m: make(map[string]commEntity)}
+func (u ConcurrentUsersMap) Get(comm_id string) commEntity {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	return u.m[comm_id]
+}
 
-var users map[string]commEntity = make(map[string]commEntity)
+func (u ConcurrentUsersMap) Set(comm_id string, value commEntity) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.m[comm_id] = value
+}
 
+func (u ConcurrentUsersMap) Contains(comm_id string) (exists bool) {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	_, exists = u.m[comm_id]
+	return exists
+}
+
+func NewUsers() ConcurrentUsersMap {
+	return ConcurrentUsersMap{m: make(map[string]commEntity)}
+}
+
+var users = NewUsers()
+
+//var users map[string]commEntity = make(map[string]commEntity)
 
 var numCores = flag.Int("n", runtime.NumCPU(), "number of CPU cores to use")
 
@@ -55,7 +77,7 @@ var testPageHTML = `<!DOCTYPE html>
     <script type="text/javascript">
         var pp = pp || {};
         pp.chat = pp.chat || {};
-        pp.chat.domain = ""
+        pp.chat.domain = "http://presence.prudhviy.com"
         pp.chat.join = function(comm_id) {
             var join_time = Math.round((new Date()).getTime() / 1000);
             $.ajax({
@@ -161,7 +183,7 @@ func sendMessage(w http.ResponseWriter, req *http.Request) {
 	recepientUserId := req.FormValue("comm_id")
 	chatMessage := req.FormValue("msg")
 
-	cEntity := users[recepientUserId]
+	cEntity := users.Get(recepientUserId)
 	cEntity.recv <- chatMessage
 
 	io.WriteString(w, response)
@@ -179,14 +201,14 @@ func openPushChannel(comm_id string, group_id string, join_time string) chan str
 	tempTime = time.Now()
 	currentUnixTime := tempTime.Unix()
 
-	_, exists := users[comm_id]
+	exists := users.Contains(comm_id)
 	if exists {
 		fmt.Printf("Already joined> User-id:%v %v\n", comm_id, join_time)
 		// work around for bug http://code.google.com/p/go/issues/detail?id=3117
-		tempUser = users[comm_id]
+		tempUser = users.Get(comm_id)
 		tempUser.lastActiveSince = currentUnixTime
-		users[comm_id] = tempUser
-		userRecvChannel = users[comm_id].recv
+		users.Set(comm_id, tempUser)
+		userRecvChannel = (users.Get(comm_id)).recv
 
 	} else {
 		fmt.Printf("Join Chat> User-id:%v %v\n", comm_id, join_time)
@@ -195,7 +217,7 @@ func openPushChannel(comm_id string, group_id string, join_time string) chan str
 		newUser.lastActiveSince = currentUnixTime
 		newUser.groupId = group_id
 		
-		users[newUser.id] = newUser
+		users.Set(newUser.id, newUser)
 		userRecvChannel = newUser.recv
 		// notify all users of the group about the new user
 		go notifyNewUserToGroup(comm_id, group_id)
@@ -204,7 +226,9 @@ func openPushChannel(comm_id string, group_id string, join_time string) chan str
 }
 
 func notifyNewUserToGroup(comm_id string, group_id string) {
-	for _, userCommEntity := range users {
+	users.mu.RLock()
+	defer users.mu.RUnlock()
+	for _, userCommEntity := range users.m {
 		if userCommEntity.groupId == group_id && userCommEntity.id != comm_id {
 			userCommEntity.recv <- comm_id
 		}
@@ -300,7 +324,6 @@ func httpHijack(w http.ResponseWriter) (net.Conn, *bufio.ReadWriter) {
 
 	return hjConn, bufrw
 }
-
 
 func main() {
 	// make sure app uses all cores
