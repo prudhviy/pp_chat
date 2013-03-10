@@ -77,7 +77,8 @@ var testPageHTML = `<!DOCTYPE html>
     <script type="text/javascript">
         var pp = pp || {};
         pp.chat = pp.chat || {};
-        pp.chat.domain = "http://presence.prudhviy.com"
+        pp.chat.domain = "";
+        pp.counter = 0;
         pp.chat.join = function(comm_id) {
             var join_time = Math.round((new Date()).getTime() / 1000);
             $.ajax({
@@ -93,21 +94,24 @@ var testPageHTML = `<!DOCTYPE html>
                 },
                 complete: function(){
                     //console.log('close conn', join_time);
-                    pp.chat.join(comm_id);
+                    var stri = "pp.chat.join(" + comm_id + ")";
+                    setTimeout(stri, 1000);
                 },
                 timeout: 20000
             });
         };
         pp.chat.send_msg = function(comm_id, msg) {
+        	pp.counter = pp.counter + 1;
+            console.log(pp.counter);
+        	msg = msg + " " + pp.counter
             $.ajax({
                 type: 'POST',
                 data: {'comm_id': comm_id, 'msg': msg},
                 url: pp.chat.domain + '/chat/message/',
-                timeout: 5000,
                 success: function(res){
                 	var x = 1;
-                    //console.log('msg sent');
-                }
+                },
+                timeout: 5000
             });
         };
         $("#join_chat").live('click', function(event){
@@ -142,6 +146,7 @@ var testPageHTML = `<!DOCTYPE html>
 
 type PresenceMessage struct {
     OnlineUsers string
+    MessageType string
 }
 
 //var room map[string]Chann = make(map[string]Chann)
@@ -208,7 +213,8 @@ func openPushChannel(comm_id string, group_id string, join_time string) chan str
 		tempUser = users.Get(comm_id)
 		tempUser.lastActiveSince = currentUnixTime
 		users.Set(comm_id, tempUser)
-		userRecvChannel = (users.Get(comm_id)).recv
+		tempoUser := users.Get(comm_id)
+		userRecvChannel = tempoUser.recv
 
 	} else {
 		fmt.Printf("Join Chat> User-id:%v %v\n", comm_id, join_time)
@@ -257,25 +263,30 @@ func joinChat(w http.ResponseWriter, req *http.Request) {
 	newMessage := getChatMessage(recv)
 
 	buildHTTPResponse(bufrw)
+	pMessage.MessageType = "presence"
 
 	if newMessage == "timeout" {
-		fmt.Printf("server timed out\n")
+		pMessage.MessageType = "serverTimeout"
+		fmt.Printf("server timed out> User-id:%s %s \n",
+					req.FormValue("comm_id"),
+					req.FormValue("join_time"))
 	} else if newMessage == "client_closed" {
+		pMessage.MessageType = "clientClose"
 		fmt.Printf("client closed conn> User-id:%s %s \n",
 					req.FormValue("comm_id"),
 					req.FormValue("join_time"))
 	} else {
 		pMessage.OnlineUsers = newMessage
-		marshalData, _ := json.Marshal(pMessage)
-		jsonResponse := string(marshalData)
-		fmt.Printf("json: %s \n", jsonResponse)
 		
-		// write body 
-		bufrw.WriteString(jsonResponse + "\r\n")
 		fmt.Printf("Chat sent to> User-id:%s %s %s\n", req.FormValue("comm_id"),
 						req.FormValue("join_time"), newMessage)
 	}
 
+	marshalData, _ := json.Marshal(pMessage)
+	jsonResponse := string(marshalData)
+	fmt.Printf("json: %s \n", jsonResponse)
+	// write body 
+	bufrw.WriteString(jsonResponse + "\r\n")
 	bufrw.Flush()
 }
 
