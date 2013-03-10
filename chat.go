@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"sync"
 
 	//"crypto/md5"
 	//"hash"
@@ -25,6 +26,24 @@ import (
 	"flag"
 	//"reflect"
 )
+
+type commEntity struct {
+	id   string
+	recv chan string
+	groupId string
+	//status string
+	lastActiveSince int64
+}
+
+type concurrentUsersMap struct {
+	sync.RWMutex
+	m map[string]commEntity
+}
+
+//var users = concurrentUsersMap{m: make(map[string]commEntity)}
+
+var users map[string]commEntity = make(map[string]commEntity)
+
 
 var numCores = flag.Int("n", runtime.NumCPU(), "number of CPU cores to use")
 
@@ -99,21 +118,11 @@ var testPageHTML = `<!DOCTYPE html>
 </html>
 `
 
-type commEntity struct {
-	id   string
-	recv chan string
-	groupId string
-	//status string
-	lastActiveSince int64
-}
-
 type PresenceMessage struct {
     OnlineUsers string
 }
 
 //var room map[string]Chann = make(map[string]Chann)
-
-var users map[string]commEntity = make(map[string]commEntity)
 
 /*func getTestData() ([string]commEntity) {
     return users
