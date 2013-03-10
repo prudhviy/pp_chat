@@ -202,21 +202,24 @@ func getChatMessage(recv chan string) (msg string) {
 func joinChat(w http.ResponseWriter, req *http.Request) {
 	var pMessage PresenceMessage
 	var newHeader http.Header = make(http.Header)
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Content-Type", "text/html")
+
+	newHeader.Add("Content-Type", "application/json; charset=UTF-8")
+	newHeader.Add("Cache-Control", "no-cache")
+	newHeader.Add("X-AppServer", "GoAPP")
+	
 	//fmt.Printf("JoinChat method> User-id:%s\n", req.FormValue("comm_id"))
 	recv := openPushChannel(req.FormValue("comm_id"),
 								req.FormValue("join_time"))
 
 	hjConn, bufrw := httpHijack(w)
 	defer hjConn.Close()
-	go is_client_disconnected(bufrw, recv)
+	go notifyClientDisconnect(bufrw, recv)
 	newMessage := getChatMessage(recv)
 
 	if newMessage == "timeout" {
 		fmt.Printf("server timed out\n")
 	} else if newMessage == "client_closed" {
-		fmt.Printf("closed conn> User-id:%s %s \n",
+		fmt.Printf("client closed conn> User-id:%s %s \n",
 					req.FormValue("comm_id"),
 					req.FormValue("join_time"))
 	} else {
@@ -226,14 +229,14 @@ func joinChat(w http.ResponseWriter, req *http.Request) {
 		jsonResponse := string(marshalData)
 		fmt.Printf("json: %s %s\n", jsonResponse, marshalData)
 
+		// 
 		bufrw.WriteString("HTTP/1.1 200 OK" + "\r\n")
-		
-		newHeader.Add("Content-Type", "application/json; charset=UTF-8")
-		newHeader.Add("Cache-Control", "no-cache")
-		newHeader.Add("X-AppServer", "GoAPP")
+			
+		// write headers
 		_ = newHeader.Write(bufrw)
 		// write a black line
 		bufrw.WriteString("\n")
+		// write body 
 		bufrw.WriteString(jsonResponse + "\r\n")
 		fmt.Printf("Chat sent to> User-id:%s %s %s\n", req.FormValue("comm_id"),
 						req.FormValue("join_time"), newMessage)
@@ -241,7 +244,7 @@ func joinChat(w http.ResponseWriter, req *http.Request) {
 	bufrw.Flush()
 }
 
-func is_client_disconnected(bufrw *bufio.ReadWriter, recv chan string) {
+func notifyClientDisconnect(bufrw *bufio.ReadWriter, recv chan string) {
 	// listen if client has closed the connection
 	bs, err := bufrw.Reader.Peek(1)
 	if len(bs) == 0 && err != nil {
