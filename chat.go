@@ -36,13 +36,14 @@ var testPageHTML = `<!DOCTYPE html>
     <script type="text/javascript">
         var pp = pp || {};
         pp.chat = pp.chat || {};
+        pp.chat.domain = "http://presence.prudhviy.com"
         pp.chat.join = function(comm_id) {
             var join_time = Math.round((new Date()).getTime() / 1000);
             $.ajax({
                 type: 'POST',
                 dataType: 'json',
                 data: {'comm_id': comm_id, 'join_time': join_time, 'project_id': 123},
-                url: '/chat/join/',
+                url: pp.chat.domain + '/chat/join/',
                 success: function(res){
                     console.log(typeof res);
                     console.log(res);
@@ -60,7 +61,7 @@ var testPageHTML = `<!DOCTYPE html>
             $.ajax({
                 type: 'POST',
                 data: {'comm_id': comm_id, 'msg': msg},
-                url: '/chat/message/',
+                url: pp.chat.domain + '/chat/message/',
                 timeout: 5000,
                 success: function(res){
                 	var x = 1;
@@ -227,11 +228,12 @@ func joinChat(w http.ResponseWriter, req *http.Request) {
 
 		bufrw.WriteString("HTTP/1.1 200 OK" + "\r\n")
 		
-		newHeader.Add("Content-Type", "text/html; charset=UTF-8")
+		newHeader.Add("Content-Type", "application/json; charset=UTF-8")
 		newHeader.Add("Cache-Control", "no-cache")
 		newHeader.Add("X-AppServer", "GoAPP")
 		_ = newHeader.Write(bufrw)
-
+		// write a black line
+		bufrw.WriteString("\n")
 		bufrw.WriteString(jsonResponse + "\r\n")
 		fmt.Printf("Chat sent to> User-id:%s %s %s\n", req.FormValue("comm_id"),
 						req.FormValue("join_time"), newMessage)
