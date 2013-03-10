@@ -36,7 +36,7 @@ var testPageHTML = `<!DOCTYPE html>
     <script type="text/javascript">
         var pp = pp || {};
         pp.chat = pp.chat || {};
-        pp.chat.domain = "http://presence.prudhviy.com"
+        pp.chat.domain = ""
         pp.chat.join = function(comm_id) {
             var join_time = Math.round((new Date()).getTime() / 1000);
             $.ajax({
@@ -215,21 +215,15 @@ func getChatMessage(recv chan string) (msg string) {
 
 func joinChat(w http.ResponseWriter, req *http.Request) {
 	var pMessage PresenceMessage
-	var newHeader http.Header = make(http.Header)
-
-	newHeader.Add("Access-Control-Allow-Origin", "*")
-	newHeader.Add("Content-Type", "application/json; charset=UTF-8")
-	newHeader.Add("Cache-Control", "no-cache")
-	newHeader.Add("X-AppServer", "GoAPP")
 	
-	//fmt.Printf("JoinChat method> User-id:%s\n", req.FormValue("comm_id"))
-	recv := openPushChannel(req.FormValue("comm_id"), req.FormValue("group_id"), 
-								req.FormValue("join_time"))
+	recv := openPushChannel(req.FormValue("comm_id"), req.FormValue("group_id"), req.FormValue("join_time"))
 
 	hjConn, bufrw := httpHijack(w)
 	defer hjConn.Close()
 	go notifyClientDisconnect(bufrw, recv)
 	newMessage := getChatMessage(recv)
+
+	buildHTTPResponse(bufrw)
 
 	if newMessage == "timeout" {
 		fmt.Printf("server timed out\n")
@@ -238,25 +232,35 @@ func joinChat(w http.ResponseWriter, req *http.Request) {
 					req.FormValue("comm_id"),
 					req.FormValue("join_time"))
 	} else {
-		//io.WriteString(w, newMessage)
 		pMessage.OnlineUsers = newMessage
 		marshalData, _ := json.Marshal(pMessage)
 		jsonResponse := string(marshalData)
-		fmt.Printf("json: %s %s\n", jsonResponse, marshalData)
-
-		// write status line
-		bufrw.WriteString("HTTP/1.1 200 OK" + "\r\n")
-			
-		// write headers
-		_ = newHeader.Write(bufrw)
-		// write a black line
-		bufrw.WriteString("\n")
+		fmt.Printf("json: %s \n", jsonResponse)
+		
 		// write body 
 		bufrw.WriteString(jsonResponse + "\r\n")
 		fmt.Printf("Chat sent to> User-id:%s %s %s\n", req.FormValue("comm_id"),
 						req.FormValue("join_time"), newMessage)
 	}
+
 	bufrw.Flush()
+}
+
+func buildHTTPResponse(bufrw *bufio.ReadWriter) {
+
+	var newHeader http.Header = make(http.Header)
+
+	newHeader.Add("Access-Control-Allow-Origin", "*")
+	newHeader.Add("Content-Type", "application/json; charset=UTF-8")
+	newHeader.Add("Cache-Control", "no-cache")
+	newHeader.Add("X-AppServer", "GoAPP")
+	// write status line
+	bufrw.WriteString("HTTP/1.1 200 OK" + "\r\n")
+	// write headers
+	_ = newHeader.Write(bufrw)
+	// write a black line
+	bufrw.WriteString("\n")
+
 }
 
 func notifyClientDisconnect(bufrw *bufio.ReadWriter, recv chan string) {
