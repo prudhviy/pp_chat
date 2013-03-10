@@ -229,7 +229,7 @@ func joinChat(w http.ResponseWriter, req *http.Request) {
 		jsonResponse := string(marshalData)
 		fmt.Printf("json: %s %s\n", jsonResponse, marshalData)
 
-		// 
+		// write status line
 		bufrw.WriteString("HTTP/1.1 200 OK" + "\r\n")
 			
 		// write headers
