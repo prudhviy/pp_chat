@@ -203,6 +203,7 @@ func joinChat(w http.ResponseWriter, req *http.Request) {
 	var pMessage PresenceMessage
 	var newHeader http.Header = make(http.Header)
 
+	newHeader.Add("Access-Control-Allow-Origin", "*")
 	newHeader.Add("Content-Type", "application/json; charset=UTF-8")
 	newHeader.Add("Cache-Control", "no-cache")
 	newHeader.Add("X-AppServer", "GoAPP")
