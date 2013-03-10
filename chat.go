@@ -76,16 +76,16 @@ var testPageHTML = `<!DOCTYPE html>
     <script type="text/javascript" src="./jquery.js"></script>
     <script type="text/javascript">
         var pp = pp || {};
-        pp.chat = pp.chat || {};
-        pp.chat.domain = "";
+        pp.presence = pp.presence || {};
+        pp.presence.domain = "http://presence.prudhviy.com";
         pp.counter = 0;
-        pp.chat.join = function(comm_id) {
+        pp.presence.join = function(comm_id) {
             var join_time = Math.round((new Date()).getTime() / 1000);
             $.ajax({
                 type: 'POST',
                 dataType: 'json',
                 data: {'comm_id': comm_id, 'join_time': join_time, 'group_id': 123},
-                url: pp.chat.domain + '/chat/join/',
+                url: pp.presence.domain + '/subscribe/message/',
                 success: function(res){
                     console.log(typeof res);
                     console.log(res);
@@ -94,20 +94,20 @@ var testPageHTML = `<!DOCTYPE html>
                 },
                 complete: function(){
                     //console.log('close conn', join_time);
-                    var stri = "pp.chat.join(" + comm_id + ")";
+                    var stri = "pp.presence.join(" + comm_id + ")";
                     setTimeout(stri, 1000);
                 },
                 timeout: 20000
             });
         };
-        pp.chat.send_msg = function(comm_id, msg) {
+        pp.presence.send_msg = function(comm_id, msg) {
         	pp.counter = pp.counter + 1;
             console.log(pp.counter);
         	msg = msg + " " + pp.counter
             $.ajax({
                 type: 'POST',
                 data: {'comm_id': comm_id, 'msg': msg},
-                url: pp.chat.domain + '/chat/message/',
+                url: pp.presence.domain + '/send/message/',
                 success: function(res){
                 	var x = 1;
                 },
@@ -115,10 +115,10 @@ var testPageHTML = `<!DOCTYPE html>
             });
         };
         $("#join_chat").live('click', function(event){
-            pp.chat.join($("#user_id").val());
+            pp.presence.join($("#user_id").val());
         });
         $("#send_msg").live('click', function(event){
-            pp.chat.send_msg($("#recv_id").val(), $("#recv_msg").val());
+            pp.presence.send_msg($("#recv_id").val(), $("#recv_msg").val());
         });
     </script>
 </head>
@@ -217,7 +217,7 @@ func openPushChannel(comm_id string, group_id string, join_time string) chan str
 		userRecvChannel = tempoUser.recv
 
 	} else {
-		fmt.Printf("Join Chat> User-id:%v %v\n", comm_id, join_time)
+		fmt.Printf("New join> User-id:%v %v\n", comm_id, join_time)
 		newUser.id = comm_id
 		newUser.recv = make(chan string, 100)
 		newUser.lastActiveSince = currentUnixTime
@@ -241,7 +241,7 @@ func notifyNewUserToGroup(comm_id string, group_id string) {
 	}
 }
 
-func getChatMessage(recv chan string) (msg string) {
+func getMessage(recv chan string) (msg string) {
 	timeout := time.After(60 * time.Second)
 	select {
 		case newMessage := <-recv:
@@ -252,7 +252,7 @@ func getChatMessage(recv chan string) (msg string) {
 	return msg
 }
 
-func joinChat(w http.ResponseWriter, req *http.Request) {
+func subscribeMessage(w http.ResponseWriter, req *http.Request) {
 	var pMessage PresenceMessage
 	
 	recv := openPushChannel(req.FormValue("comm_id"), req.FormValue("group_id"), req.FormValue("join_time"))
@@ -260,7 +260,7 @@ func joinChat(w http.ResponseWriter, req *http.Request) {
 	hjConn, bufrw := httpHijack(w)
 	defer hjConn.Close()
 	go notifyClientDisconnect(bufrw, recv)
-	newMessage := getChatMessage(recv)
+	newMessage := getMessage(recv)
 
 	buildHTTPResponse(bufrw)
 	pMessage.MessageType = "presence"
@@ -278,7 +278,7 @@ func joinChat(w http.ResponseWriter, req *http.Request) {
 	} else {
 		pMessage.OnlineUsers = newMessage
 		
-		fmt.Printf("Chat sent to> User-id:%s %s %s\n", req.FormValue("comm_id"),
+		fmt.Printf("Message sent to> User-id:%s %s %s\n", req.FormValue("comm_id"),
 						req.FormValue("join_time"), newMessage)
 	}
 
@@ -340,12 +340,12 @@ func main() {
 	// make sure app uses all cores
 	flag.Parse()
 	runtime.GOMAXPROCS(*numCores)
-	fmt.Printf("\nChat server running at "+
+	fmt.Printf("\nPresence server running at "+
 		"http://0.0.0.0:8000 on %d CPU cores\n", *numCores)
 	http.HandleFunc("/", testPage)
 	http.HandleFunc("/jquery.js", jquery)
-	http.HandleFunc("/chat/join/", joinChat)
-	http.HandleFunc("/chat/message/", sendMessage)
+	http.HandleFunc("/subscribe/message/", subscribeMessage)
+	http.HandleFunc("/send/message/", sendMessage)
 
 	err := http.ListenAndServe("0.0.0.0:8000", nil)
 	if err != nil {
