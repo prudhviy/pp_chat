@@ -224,12 +224,12 @@ func getAllOnlineUsers(requestingCommId string, group_id string) {
 	var onlineUsers []string
 	
 	users.mu.RLock()
-	defer users.mu.RUnlock()
 	for _, userCommEntity := range users.m {
 		if userCommEntity.groupId == group_id && userCommEntity.id != requestingCommId && userActive(userCommEntity.lastActiveSince) {
 			onlineUsers = append(onlineUsers, userCommEntity.id)
 		}
 	}
+	users.mu.RUnlock()
 	exists := users.Contains(requestingCommId)
 	if exists {
 		requestingUser := users.Get(requestingCommId)
@@ -313,9 +313,31 @@ func notifyNewUserToGroup(comm_id string, group_id string) {
 	}
 }
 
+func notifyUserOfflineToGroup(comm_id string, group_id string) {
+	var message TimestampedMessage
+	var newUser []string = []string{comm_id}
+	
+	timeout := time.After(2 * time.Second)
+	select {
+	case <-timeout:
+		userCommEntity := users.Get(comm_id)
+		if userActive(userCommEntity.lastActiveSince) {
+			users.mu.RLock()
+			defer users.mu.RUnlock()
+			for _, userCommEntity := range users.m {
+				if userCommEntity.groupId == group_id && userCommEntity.id != comm_id {
+					message.Value = newUser
+					message.CreatedTime = (time.Now()).Unix()
+					message.Type = "offpresence"
+					userCommEntity.recv <- message
+				}
+			}
+		}
+	}
+}
+
 func getMessage(recv chan TimestampedMessage) (msg TimestampedMessage) {
 	timeout := time.After(60 * time.Second)
-
 	select {
 		case newMessage := <-recv:
 			msg = newMessage
@@ -324,7 +346,6 @@ func getMessage(recv chan TimestampedMessage) (msg TimestampedMessage) {
 			msg.Value = "serverTimeout"
 			msg.Type = "serverTimeout"
 	}
-	
 	return msg
 }
 
@@ -333,7 +354,7 @@ func subscribeMessage(w http.ResponseWriter, req *http.Request) {
 
 	hjConn, bufrw := httpHijack(w)
 	defer hjConn.Close()
-	go notifyClientDisconnect(bufrw, recv)
+	go notifyClientDisconnect(bufrw, recv, req.FormValue("comm_id"), req.FormValue("group_id"))
 	newMessage := getMessage(recv)
 
 	buildHTTPResponse(bufrw)
@@ -364,7 +385,6 @@ func subscribeMessage(w http.ResponseWriter, req *http.Request) {
 }
 
 func buildHTTPResponse(bufrw *bufio.ReadWriter) {
-
 	var newHeader http.Header = make(http.Header)
 
 	newHeader.Add("Access-Control-Allow-Origin", "*")
@@ -377,10 +397,9 @@ func buildHTTPResponse(bufrw *bufio.ReadWriter) {
 	_ = newHeader.Write(bufrw)
 	// write a black line
 	bufrw.WriteString("\n")
-
 }
 
-func notifyClientDisconnect(bufrw *bufio.ReadWriter, recv chan TimestampedMessage) {
+func notifyClientDisconnect(bufrw *bufio.ReadWriter, recv chan TimestampedMessage, comm_id string, group_id string) {
 	var message TimestampedMessage
 
 	// listen if client has closed the connection
@@ -396,6 +415,7 @@ func notifyClientDisconnect(bufrw *bufio.ReadWriter, recv chan TimestampedMessag
 			message.Type = "clientClose"
 			recv <- message
 		}
+		go notifyUserOfflineToGroup(comm_id, group_id)
 	}
 }
 
