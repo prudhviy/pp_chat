@@ -300,12 +300,12 @@ func openPushChannel(comm_id string, group_id string, join_time string) chan Tim
 
 func notifyNewUserToGroup(comm_id string, group_id string) {
 	var message TimestampedMessage
-	var onlineUsers []string = []string{comm_id}
+	var newUser []string = []string{comm_id}
 	users.mu.RLock()
 	defer users.mu.RUnlock()
 	for _, userCommEntity := range users.m {
 		if userCommEntity.groupId == group_id && userCommEntity.id != comm_id && userActive(userCommEntity.lastActiveSince) {
-			message.Value = onlineUsers
+			message.Value = newUser
 			message.CreatedTime = (time.Now()).Unix()
 			message.Type = "presence"
 			userCommEntity.recv <- message
