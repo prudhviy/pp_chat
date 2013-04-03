@@ -204,7 +204,7 @@ func fetchAllOnlineUsers(w http.ResponseWriter, req *http.Request) {
 func userActive(lastActiveSince int64) (active bool) {
 	currentUnixTime := (time.Now()).Unix()
 	active = false
-	if currentUnixTime - lastActiveSince < 20 {
+	if currentUnixTime - lastActiveSince < 4 {
 		active = true
 	}
 	return
@@ -321,7 +321,7 @@ func notifyUserOfflineToGroup(comm_id string, group_id string) {
 	select {
 	case <-timeout:
 		userCommEntity := users.Get(comm_id)
-		if userActive(userCommEntity.lastActiveSince) {
+		if !userActive(userCommEntity.lastActiveSince) {
 			users.mu.RLock()
 			defer users.mu.RUnlock()
 			for _, userCommEntity := range users.m {
