@@ -201,14 +201,32 @@ func fetchAllOnlineUsers(w http.ResponseWriter, req *http.Request) {
 	io.WriteString(w, "success")
 }
 
+func userActive(lastActiveSince int64) (active bool) {
+	currentUnixTime := (time.Now()).Unix()
+	active = false
+	if currentUnixTime - lastActiveSince < 20 {
+		active = true
+	}
+	return
+}
+
+func messageActive(createdTime int64) (active bool) {
+	currentUnixTime := (time.Now()).Unix()
+	active = false
+	if currentUnixTime - createdTime < 15 {
+		active = true
+	}
+	return
+}
+
 func getAllOnlineUsers(requestingCommId string, group_id string) {
 	var message TimestampedMessage
 	var onlineUsers []string
-
+	
 	users.mu.RLock()
 	defer users.mu.RUnlock()
 	for _, userCommEntity := range users.m {
-		if userCommEntity.groupId == group_id && userCommEntity.id != requestingCommId {
+		if userCommEntity.groupId == group_id && userCommEntity.id != requestingCommId && userActive(userCommEntity.lastActiveSince) {
 			onlineUsers = append(onlineUsers, userCommEntity.id)
 		}
 	}
@@ -217,7 +235,7 @@ func getAllOnlineUsers(requestingCommId string, group_id string) {
 		requestingUser := users.Get(requestingCommId)
 		message.Value = onlineUsers
 		message.CreatedTime = (time.Now()).Unix()
-		message.Type = "presence"
+		message.Type = "allpresence"
 		requestingUser.recv <- message
 	}
 }
@@ -237,7 +255,9 @@ func sendMessage(w http.ResponseWriter, req *http.Request) {
 	message.Type = "chat"
 
 	cEntity := users.Get(recepientUserId)
-	cEntity.recv <- message
+	if userActive(cEntity.lastActiveSince) {
+		cEntity.recv <- message
+	}
 
 	io.WriteString(w, response)
 	/*if err == nil {
@@ -280,12 +300,11 @@ func openPushChannel(comm_id string, group_id string, join_time string) chan Tim
 
 func notifyNewUserToGroup(comm_id string, group_id string) {
 	var message TimestampedMessage
-	var onlineUsers []string
+	var onlineUsers []string = []string{comm_id}
 	users.mu.RLock()
 	defer users.mu.RUnlock()
 	for _, userCommEntity := range users.m {
-		if userCommEntity.groupId == group_id && userCommEntity.id != comm_id {
-			onlineUsers = append(onlineUsers, comm_id)
+		if userCommEntity.groupId == group_id && userCommEntity.id != comm_id && userActive(userCommEntity.lastActiveSince) {
 			message.Value = onlineUsers
 			message.CreatedTime = (time.Now()).Unix()
 			message.Type = "presence"
@@ -334,13 +353,14 @@ func subscribeMessage(w http.ResponseWriter, req *http.Request) {
 		fmt.Printf("Message sent to> User-id:%s %s %s\n", req.FormValue("comm_id"),
 						req.FormValue("join_time"), newMessage.Value)
 	}
-
-	marshalData, _ := json.Marshal(newMessage)
-	jsonResponse := string(marshalData)
-	fmt.Printf("json: %s \n", jsonResponse)
-	// write body 
-	bufrw.WriteString(jsonResponse + "\r\n")
-	bufrw.Flush()
+	if messageActive(newMessage.CreatedTime) {
+		marshalData, _ := json.Marshal(newMessage)
+		jsonResponse := string(marshalData)
+		fmt.Printf("json: %s \n", jsonResponse)
+		// write body 
+		bufrw.WriteString(jsonResponse + "\r\n")
+		bufrw.Flush()
+	}
 }
 
 func buildHTTPResponse(bufrw *bufio.ReadWriter) {
