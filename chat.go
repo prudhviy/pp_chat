@@ -52,6 +52,17 @@ func (u ConcurrentUsersMap) Get(comm_id string) commEntity {
 	return u.m[comm_id]
 }
 
+func (u ConcurrentUsersMap) GetAllCommEntities(prefix_id string, group_id string) {
+	var userCommEntity []CommEntity
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	for _, userCommEntity := range u.m {
+		if userCommEntity.groupId == group_id && userCommEntity.id != requestingCommId && userActive(userCommEntity.lastActiveSince) {
+			onlineUsers = append(onlineUsers, userCommEntity.id)
+		}
+	}
+}
+
 func (u ConcurrentUsersMap) Set(comm_id string, value commEntity) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
@@ -124,10 +135,11 @@ var testPageHTML = `<!DOCTYPE html>
             });
         };
         pp.presence.getAllOnlineUsers = function(comm_id) {
+        	var server_comm_id = comm_id + "_" + pp.clientId.toString();
         	$.ajax({
                 type: 'POST',
                 dataType: 'text/html',
-                data: {'comm_id': comm_id, 'group_id': 123},
+                data: {'comm_id': server_comm_id, 'group_id': 123},
                 url: pp.presence.domain + '/get/onlineUsers/',
                 success: function(res){
                     console.log(res);
@@ -256,7 +268,7 @@ func sendMessage(w http.ResponseWriter, req *http.Request) {
 	message.Value = req.FormValue("msg")
 	message.CreatedTime = (time.Now()).Unix()
 	message.Type = "chat"
-
+	recepientUserId
 	cEntity := users.Get(recepientUserId)
 	if userActive(cEntity.lastActiveSince) {
 		cEntity.recv <- message
@@ -285,7 +297,6 @@ func openPushChannel(comm_id string, group_id string, join_time string) chan Tim
 		users.Set(comm_id, tempUser)
 		tempoUser := users.Get(comm_id)
 		userRecvChannel = tempoUser.recv
-
 	} else {
 		fmt.Printf("New join> User-id:%v %v\n", comm_id, join_time)
 		newUser.id = comm_id
@@ -295,13 +306,13 @@ func openPushChannel(comm_id string, group_id string, join_time string) chan Tim
 		
 		users.Set(newUser.id, newUser)
 		userRecvChannel = newUser.recv
-		// notify all users of the group about the new user
-		go notifyNewUserToGroup(comm_id, group_id)
 	}
+	// notify all users of the group about the new user
+	go notifyUserActiveToGroup(comm_id, group_id)
 	return userRecvChannel
 }
 
-func notifyNewUserToGroup(comm_id string, group_id string) {
+func notifyUserActiveToGroup(comm_id string, group_id string) {
 	var message TimestampedMessage
 	var newUser []string = []string{comm_id}
 	users.mu.RLock()
