@@ -85,12 +85,14 @@ var testPageHTML = `<!DOCTYPE html>
         pp.presence = pp.presence || {};
         pp.presence.domain = "";
         pp.counter = 0;
+        pp.clientId = Math.round((new Date()).getTime() / 1000);
         pp.presence.join = function(comm_id) {
             var join_time = Math.round((new Date()).getTime() / 1000);
+            var server_comm_id = comm_id + "_" + pp.clientId.toString();
             $.ajax({
                 type: 'POST',
                 dataType: 'json',
-                data: {'comm_id': comm_id, 'join_time': join_time, 'group_id': 123},
+                data: {'comm_id': server_comm_id, 'join_time': join_time, 'group_id': 123},
                 url: pp.presence.domain + '/subscribe/message/',
                 success: function(res){
                     console.log(typeof res);
@@ -100,8 +102,9 @@ var testPageHTML = `<!DOCTYPE html>
                 },
                 complete: function(){
                     //console.log('close conn', join_time);
-                    var stri = "pp.presence.join(" + comm_id + ")";
-                    setTimeout(stri, 100);
+                    setTimeout(function() {
+                    	pp.presence.join(comm_id);
+                    }, 100);
                 },
                 timeout: 20000
             });
