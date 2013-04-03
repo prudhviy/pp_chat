@@ -289,14 +289,17 @@ func subscribeMessage(w http.ResponseWriter, req *http.Request) {
 	buildHTTPResponse(bufrw)
 
 	if newMessage.MessageType == "serverTimeout" {
-		fmt.Printf("server timed out> User-id:%s %s \n",
+		fmt.Printf("Server timed out> User-id:%s %s \n",
 					req.FormValue("comm_id"),
 					req.FormValue("join_time"))
 	} else if newMessage.MessageType == "clientClose" {
-		fmt.Printf("client closed conn> User-id:%s %s \n",
+		fmt.Printf("Client closed conn> User-id:%s %s \n",
 					req.FormValue("comm_id"),
 					req.FormValue("join_time"))
 	} else if newMessage.MessageType == "presence" {
+		fmt.Printf("Presence Message sent to> User-id:%s %s %s\n", req.FormValue("comm_id"),
+						req.FormValue("join_time"), newMessage.Value)
+	} else if newMessage.MessageType == "chat" {
 		fmt.Printf("Message sent to> User-id:%s %s %s\n", req.FormValue("comm_id"),
 						req.FormValue("join_time"), newMessage.Value)
 	}
