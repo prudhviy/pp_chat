@@ -27,9 +27,19 @@ import (
 	//"reflect"
 )
 
+type PresenceMessage struct {
+    OnlineUsers string
+    MessageType string
+}
+
+type TimestampedMessage struct {
+	createdTime int64
+	value string
+}
+
 type commEntity struct {
 	id   string
-	recv chan string
+	recv chan TimestampedMessage
 	groupId string
 	//status string
 	lastActiveSince int64
@@ -77,7 +87,7 @@ var testPageHTML = `<!DOCTYPE html>
     <script type="text/javascript">
         var pp = pp || {};
         pp.presence = pp.presence || {};
-        pp.presence.domain = "http://presence.prudhviy.com";
+        pp.presence.domain = "";
         pp.counter = 0;
         pp.presence.join = function(comm_id) {
             var join_time = Math.round((new Date()).getTime() / 1000);
@@ -144,11 +154,6 @@ var testPageHTML = `<!DOCTYPE html>
 </html>
 `
 
-type PresenceMessage struct {
-    OnlineUsers string
-    MessageType string
-}
-
 //var room map[string]Chann = make(map[string]Chann)
 
 /*func getTestData() ([string]commEntity) {
@@ -178,7 +183,7 @@ func jquery(w http.ResponseWriter, req *http.Request) {
 
 func sendMessage(w http.ResponseWriter, req *http.Request) {
 	//var err error
-
+	var message TimestampedMessage
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Content-Type", "application/javascript")
@@ -186,10 +191,11 @@ func sendMessage(w http.ResponseWriter, req *http.Request) {
 	response := "message sent"
 
 	recepientUserId := req.FormValue("comm_id")
-	chatMessage := req.FormValue("msg")
+	message.value = req.FormValue("msg")
+	message.createdTime = (time.Now()).Unix()
 
 	cEntity := users.Get(recepientUserId)
-	cEntity.recv <- chatMessage
+	cEntity.recv <- message
 
 	io.WriteString(w, response)
 	/*if err == nil {
@@ -197,15 +203,14 @@ func sendMessage(w http.ResponseWriter, req *http.Request) {
 	}*/
 }
 
-func openPushChannel(comm_id string, group_id string, join_time string) chan string {
+func openPushChannel(comm_id string, group_id string, join_time string) chan TimestampedMessage {
 	var newUser commEntity
 	var tempUser commEntity
-	var userRecvChannel chan string
-	var tempTime time.Time
+	var userRecvChannel chan TimestampedMessage
+	//var tempTime time.Time
 
-	tempTime = time.Now()
-	currentUnixTime := tempTime.Unix()
-
+	currentUnixTime := (time.Now()).Unix()
+	
 	exists := users.Contains(comm_id)
 	if exists {
 		fmt.Printf("Already joined> User-id:%v %v\n", comm_id, join_time)
@@ -219,7 +224,7 @@ func openPushChannel(comm_id string, group_id string, join_time string) chan str
 	} else {
 		fmt.Printf("New join> User-id:%v %v\n", comm_id, join_time)
 		newUser.id = comm_id
-		newUser.recv = make(chan string, 100)
+		newUser.recv = make(chan TimestampedMessage, 100)
 		newUser.lastActiveSince = currentUnixTime
 		newUser.groupId = group_id
 		
@@ -232,23 +237,30 @@ func openPushChannel(comm_id string, group_id string, join_time string) chan str
 }
 
 func notifyNewUserToGroup(comm_id string, group_id string) {
+	var message TimestampedMessage
+
 	users.mu.RLock()
 	defer users.mu.RUnlock()
 	for _, userCommEntity := range users.m {
 		if userCommEntity.groupId == group_id && userCommEntity.id != comm_id {
-			userCommEntity.recv <- comm_id
+			message.value = comm_id
+			message.createdTime = (time.Now()).Unix()
+			userCommEntity.recv <- message
 		}
 	}
 }
 
-func getMessage(recv chan string) (msg string) {
+func getMessage(recv chan TimestampedMessage) (msg TimestampedMessage) {
 	timeout := time.After(60 * time.Second)
+
 	select {
 		case newMessage := <-recv:
 			msg = newMessage
 		case <-timeout:
-			msg = "timeout"
+			msg.createdTime = (time.Now()).Unix()
+			msg.value = "timeout"
 	}
+	
 	return msg
 }
 
@@ -265,21 +277,20 @@ func subscribeMessage(w http.ResponseWriter, req *http.Request) {
 	buildHTTPResponse(bufrw)
 	pMessage.MessageType = "presence"
 
-	if newMessage == "timeout" {
+	if newMessage.value == "timeout" {
 		pMessage.MessageType = "serverTimeout"
 		fmt.Printf("server timed out> User-id:%s %s \n",
 					req.FormValue("comm_id"),
 					req.FormValue("join_time"))
-	} else if newMessage == "client_closed" {
+	} else if newMessage.value == "client_closed" {
 		pMessage.MessageType = "clientClose"
 		fmt.Printf("client closed conn> User-id:%s %s \n",
 					req.FormValue("comm_id"),
 					req.FormValue("join_time"))
 	} else {
-		pMessage.OnlineUsers = newMessage
-		
+		pMessage.OnlineUsers = newMessage.value
 		fmt.Printf("Message sent to> User-id:%s %s %s\n", req.FormValue("comm_id"),
-						req.FormValue("join_time"), newMessage)
+						req.FormValue("join_time"), newMessage.value)
 	}
 
 	marshalData, _ := json.Marshal(pMessage)
@@ -307,7 +318,9 @@ func buildHTTPResponse(bufrw *bufio.ReadWriter) {
 
 }
 
-func notifyClientDisconnect(bufrw *bufio.ReadWriter, recv chan string) {
+func notifyClientDisconnect(bufrw *bufio.ReadWriter, recv chan TimestampedMessage) {
+	var message TimestampedMessage
+
 	// listen if client has closed the connection
 	bs, err := bufrw.Reader.Peek(1)
 	if len(bs) == 0 && err != nil {
@@ -316,7 +329,9 @@ func notifyClientDisconnect(bufrw *bufio.ReadWriter, recv chan string) {
 			fmt.Printf("server side hjConn close\n")
 		} else {
 			//fmt.Printf("client side hjConn close\n")
-			recv <- "client_closed"
+			message.createdTime = (time.Now()).Unix()
+			message.value = "client_closed"
+			recv <- message
 		}
 	}
 }
