@@ -120,8 +120,21 @@ var testPageHTML = `<!DOCTYPE html>
                 timeout: 5000
             });
         };
+        pp.presence.getAllOnlineUsers = function(comm_id) {
+        	$.ajax({
+                type: 'POST',
+                dataType: 'text/html',
+                data: {'comm_id': comm_id, 'group_id': 123},
+                url: pp.presence.domain + '/get/onlineUsers/',
+                success: function(res){
+                    console.log(res);
+                },
+                timeout: 20000
+            });
+        };
         $("#join_chat").live('click', function(event){
             pp.presence.join($("#user_id").val());
+            pp.presence.getAllOnlineUsers($("#user_id").val());
         });
         $("#send_msg").live('click', function(event){
             pp.presence.send_msg($("#recv_id").val(), $("#recv_msg").val());
@@ -175,6 +188,38 @@ func jquery(w http.ResponseWriter, req *http.Request) {
 	}
 
 	io.WriteString(w, string(resourceData))
+}
+
+
+func fetchAllOnlineUsers(w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Content-Type", "text/html; charset=iso-8859-1")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	go getAllOnlineUsers(req.FormValue("comm_id"), req.FormValue("group_id"))
+
+	io.WriteString(w, "success")
+}
+
+func getAllOnlineUsers(requestingCommId string, group_id string) {
+	var message TimestampedMessage
+	var onlineUsers []string
+
+	users.mu.RLock()
+	defer users.mu.RUnlock()
+	for _, userCommEntity := range users.m {
+		if userCommEntity.groupId == group_id && userCommEntity.id != requestingCommId {
+			onlineUsers = append(onlineUsers, userCommEntity.id)
+		}
+	}
+	exists := users.Contains(requestingCommId)
+	if exists {
+		requestingUser := users.Get(requestingCommId)
+		message.Value = onlineUsers
+		message.CreatedTime = (time.Now()).Unix()
+		message.Type = "presence"
+		requestingUser.recv <- message
+	}
 }
 
 func sendMessage(w http.ResponseWriter, req *http.Request) {
@@ -235,32 +280,18 @@ func openPushChannel(comm_id string, group_id string, join_time string) chan Tim
 
 func notifyNewUserToGroup(comm_id string, group_id string) {
 	var message TimestampedMessage
-
+	var onlineUsers []string
 	users.mu.RLock()
 	defer users.mu.RUnlock()
 	for _, userCommEntity := range users.m {
 		if userCommEntity.groupId == group_id && userCommEntity.id != comm_id {
-			message.Value = comm_id
+			onlineUsers = append(onlineUsers, comm_id)
+			message.Value = onlineUsers
 			message.CreatedTime = (time.Now()).Unix()
 			message.Type = "presence"
 			userCommEntity.recv <- message
 		}
 	}
-}
-
-func getAllOnlineUsers(requestingCommId string, group_id string) {
-	var message TimestampedMessage
-
-	users.mu.RLock()
-	defer users.mu.RUnlock()
-	for _, userCommEntity := range users.m {
-		if userCommEntity.groupId == group_id && userCommEntity.id != requestingCommId {
-			message.Value = requestingCommId
-			message.CreatedTime = (time.Now()).Unix()
-			message.Type = "presence"
-			userCommEntity.recv <- message
-		}
-	}	
 }
 
 func getMessage(recv chan TimestampedMessage) (msg TimestampedMessage) {
@@ -373,6 +404,7 @@ func main() {
 	http.HandleFunc("/jquery.js", jquery)
 	http.HandleFunc("/subscribe/message/", subscribeMessage)
 	http.HandleFunc("/send/message/", sendMessage)
+	http.HandleFunc("/get/onlineUsers/", fetchAllOnlineUsers)
 
 	err := http.ListenAndServe("0.0.0.0:8000", nil)
 	if err != nil {
