@@ -18,7 +18,7 @@ import (
 	//"html/template"
 	"log"
 	"fmt"
-	//"strings"
+	"strings"
 	"encoding/json"
 	//"encoding/hex"
 
@@ -52,15 +52,17 @@ func (u ConcurrentUsersMap) Get(comm_id string) commEntity {
 	return u.m[comm_id]
 }
 
-func (u ConcurrentUsersMap) GetAllCommEntities(prefix_id string, group_id string) {
-	var userCommEntity []CommEntity
+func (u ConcurrentUsersMap) GetUserCommEntities(prefix_id string, group_id string) []commEntity {
+	var userCommEntities []commEntity
+	prefix_id = prefix_id + "_"
 	u.mu.RLock()
 	defer u.mu.RUnlock()
 	for _, userCommEntity := range u.m {
-		if userCommEntity.groupId == group_id && userCommEntity.id != requestingCommId && userActive(userCommEntity.lastActiveSince) {
-			onlineUsers = append(onlineUsers, userCommEntity.id)
+		if userCommEntity.groupId == group_id && strings.Contains(userCommEntity.id, prefix_id) {
+			userCommEntities = append(userCommEntities, userCommEntity)
 		}
 	}
+	return userCommEntities
 }
 
 func (u ConcurrentUsersMap) Set(comm_id string, value commEntity) {
@@ -126,7 +128,7 @@ var testPageHTML = `<!DOCTYPE html>
         	msg = msg + " " + pp.counter
             $.ajax({
                 type: 'POST',
-                data: {'comm_id': comm_id, 'msg': msg},
+                data: {'comm_id': comm_id, 'group_id': 123, 'msg': msg},
                 url: pp.presence.domain + '/send/message/',
                 success: function(res){
                 	var x = 1;
@@ -264,14 +266,17 @@ func sendMessage(w http.ResponseWriter, req *http.Request) {
 
 	response := "message sent"
 
-	recepientUserId := req.FormValue("comm_id")
+	comm_id_prefix := req.FormValue("comm_id")
+	group_id := req.FormValue("group_id")
 	message.Value = req.FormValue("msg")
 	message.CreatedTime = (time.Now()).Unix()
 	message.Type = "chat"
-	recepientUserId
-	cEntity := users.Get(recepientUserId)
-	if userActive(cEntity.lastActiveSince) {
+	cEntities := users.GetUserCommEntities(comm_id_prefix, group_id)
+	//fmt.Printf("===== %v \n%T \n%#v =====\n", cEntities, cEntities, cEntities)
+	for _, cEntity := range cEntities {
+		//if userActive(cEntity.lastActiveSince) {
 		cEntity.recv <- message
+		//}
 	}
 
 	io.WriteString(w, response)
@@ -308,7 +313,7 @@ func openPushChannel(comm_id string, group_id string, join_time string) chan Tim
 		userRecvChannel = newUser.recv
 	}
 	// notify all users of the group about the new user
-	go notifyUserActiveToGroup(comm_id, group_id)
+	//go notifyUserActiveToGroup(comm_id, group_id)
 	return userRecvChannel
 }
 
