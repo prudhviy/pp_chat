@@ -27,14 +27,10 @@ import (
 	//"reflect"
 )
 
-type PresenceMessage struct {
-    OnlineUsers string
-    MessageType string
-}
-
 type TimestampedMessage struct {
-	createdTime int64
-	value string
+	CreatedTime int64
+	Value string
+	MessageType string
 }
 
 type commEntity struct {
@@ -99,7 +95,7 @@ var testPageHTML = `<!DOCTYPE html>
                 success: function(res){
                     console.log(typeof res);
                     console.log(res);
-                    var ele = '<li>' + res.OnlineUsers + '</li>'
+                    var ele = '<li>' + res.Value + '</li>'
                     $('.log').append($(ele));
                 },
                 complete: function(){
@@ -191,8 +187,9 @@ func sendMessage(w http.ResponseWriter, req *http.Request) {
 	response := "message sent"
 
 	recepientUserId := req.FormValue("comm_id")
-	message.value = req.FormValue("msg")
-	message.createdTime = (time.Now()).Unix()
+	message.Value = req.FormValue("msg")
+	message.CreatedTime = (time.Now()).Unix()
+	message.MessageType = "chat"
 
 	cEntity := users.Get(recepientUserId)
 	cEntity.recv <- message
@@ -243,11 +240,27 @@ func notifyNewUserToGroup(comm_id string, group_id string) {
 	defer users.mu.RUnlock()
 	for _, userCommEntity := range users.m {
 		if userCommEntity.groupId == group_id && userCommEntity.id != comm_id {
-			message.value = comm_id
-			message.createdTime = (time.Now()).Unix()
+			message.Value = comm_id
+			message.CreatedTime = (time.Now()).Unix()
+			message.MessageType = "presence"
 			userCommEntity.recv <- message
 		}
 	}
+}
+
+func getAllOnlineUsers(requestingCommId string, group_id string) {
+	var message TimestampedMessage
+
+	users.mu.RLock()
+	defer users.mu.RUnlock()
+	for _, userCommEntity := range users.m {
+		if userCommEntity.groupId == group_id && userCommEntity.id != requestingCommId {
+			message.Value = requestingCommId
+			message.CreatedTime = (time.Now()).Unix()
+			message.MessageType = "presence"
+			userCommEntity.recv <- message
+		}
+	}	
 }
 
 func getMessage(recv chan TimestampedMessage) (msg TimestampedMessage) {
@@ -257,16 +270,15 @@ func getMessage(recv chan TimestampedMessage) (msg TimestampedMessage) {
 		case newMessage := <-recv:
 			msg = newMessage
 		case <-timeout:
-			msg.createdTime = (time.Now()).Unix()
-			msg.value = "timeout"
+			msg.CreatedTime = (time.Now()).Unix()
+			msg.Value = "serverTimeout"
+			msg.MessageType = "serverTimeout"
 	}
 	
 	return msg
 }
 
 func subscribeMessage(w http.ResponseWriter, req *http.Request) {
-	var pMessage PresenceMessage
-	
 	recv := openPushChannel(req.FormValue("comm_id"), req.FormValue("group_id"), req.FormValue("join_time"))
 
 	hjConn, bufrw := httpHijack(w)
@@ -275,25 +287,21 @@ func subscribeMessage(w http.ResponseWriter, req *http.Request) {
 	newMessage := getMessage(recv)
 
 	buildHTTPResponse(bufrw)
-	pMessage.MessageType = "presence"
 
-	if newMessage.value == "timeout" {
-		pMessage.MessageType = "serverTimeout"
+	if newMessage.MessageType == "serverTimeout" {
 		fmt.Printf("server timed out> User-id:%s %s \n",
 					req.FormValue("comm_id"),
 					req.FormValue("join_time"))
-	} else if newMessage.value == "client_closed" {
-		pMessage.MessageType = "clientClose"
+	} else if newMessage.MessageType == "clientClose" {
 		fmt.Printf("client closed conn> User-id:%s %s \n",
 					req.FormValue("comm_id"),
 					req.FormValue("join_time"))
-	} else {
-		pMessage.OnlineUsers = newMessage.value
+	} else if newMessage.MessageType == "presence" {
 		fmt.Printf("Message sent to> User-id:%s %s %s\n", req.FormValue("comm_id"),
-						req.FormValue("join_time"), newMessage.value)
+						req.FormValue("join_time"), newMessage.Value)
 	}
 
-	marshalData, _ := json.Marshal(pMessage)
+	marshalData, _ := json.Marshal(newMessage)
 	jsonResponse := string(marshalData)
 	fmt.Printf("json: %s \n", jsonResponse)
 	// write body 
@@ -329,8 +337,9 @@ func notifyClientDisconnect(bufrw *bufio.ReadWriter, recv chan TimestampedMessag
 			fmt.Printf("server side hjConn close\n")
 		} else {
 			//fmt.Printf("client side hjConn close\n")
-			message.createdTime = (time.Now()).Unix()
-			message.value = "client_closed"
+			message.CreatedTime = (time.Now()).Unix()
+			message.Value = "clientClose"
+			message.MessageType = "clientClose"
 			recv <- message
 		}
 	}
