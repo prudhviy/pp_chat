@@ -29,8 +29,8 @@ import (
 
 type TimestampedMessage struct {
 	CreatedTime int64
-	Value string
-	MessageType string
+	Value interface{}
+	Type string
 }
 
 type commEntity struct {
@@ -95,7 +95,7 @@ var testPageHTML = `<!DOCTYPE html>
                 success: function(res){
                     console.log(typeof res);
                     console.log(res);
-                    var ele = '<li>' + res.Value + '</li>'
+                    var ele = '<li>' + res.Value + '&nbsp;|&nbsp;' + res.Type +'</li>'
                     $('.log').append($(ele));
                 },
                 complete: function(){
@@ -189,7 +189,7 @@ func sendMessage(w http.ResponseWriter, req *http.Request) {
 	recepientUserId := req.FormValue("comm_id")
 	message.Value = req.FormValue("msg")
 	message.CreatedTime = (time.Now()).Unix()
-	message.MessageType = "chat"
+	message.Type = "chat"
 
 	cEntity := users.Get(recepientUserId)
 	cEntity.recv <- message
@@ -242,7 +242,7 @@ func notifyNewUserToGroup(comm_id string, group_id string) {
 		if userCommEntity.groupId == group_id && userCommEntity.id != comm_id {
 			message.Value = comm_id
 			message.CreatedTime = (time.Now()).Unix()
-			message.MessageType = "presence"
+			message.Type = "presence"
 			userCommEntity.recv <- message
 		}
 	}
@@ -257,7 +257,7 @@ func getAllOnlineUsers(requestingCommId string, group_id string) {
 		if userCommEntity.groupId == group_id && userCommEntity.id != requestingCommId {
 			message.Value = requestingCommId
 			message.CreatedTime = (time.Now()).Unix()
-			message.MessageType = "presence"
+			message.Type = "presence"
 			userCommEntity.recv <- message
 		}
 	}	
@@ -272,7 +272,7 @@ func getMessage(recv chan TimestampedMessage) (msg TimestampedMessage) {
 		case <-timeout:
 			msg.CreatedTime = (time.Now()).Unix()
 			msg.Value = "serverTimeout"
-			msg.MessageType = "serverTimeout"
+			msg.Type = "serverTimeout"
 	}
 	
 	return msg
@@ -288,18 +288,18 @@ func subscribeMessage(w http.ResponseWriter, req *http.Request) {
 
 	buildHTTPResponse(bufrw)
 
-	if newMessage.MessageType == "serverTimeout" {
+	if newMessage.Type == "serverTimeout" {
 		fmt.Printf("Server timed out> User-id:%s %s \n",
 					req.FormValue("comm_id"),
 					req.FormValue("join_time"))
-	} else if newMessage.MessageType == "clientClose" {
+	} else if newMessage.Type == "clientClose" {
 		fmt.Printf("Client closed conn> User-id:%s %s \n",
 					req.FormValue("comm_id"),
 					req.FormValue("join_time"))
-	} else if newMessage.MessageType == "presence" {
+	} else if newMessage.Type == "presence" {
 		fmt.Printf("Presence Message sent to> User-id:%s %s %s\n", req.FormValue("comm_id"),
 						req.FormValue("join_time"), newMessage.Value)
-	} else if newMessage.MessageType == "chat" {
+	} else if newMessage.Type == "chat" {
 		fmt.Printf("Message sent to> User-id:%s %s %s\n", req.FormValue("comm_id"),
 						req.FormValue("join_time"), newMessage.Value)
 	}
@@ -342,7 +342,7 @@ func notifyClientDisconnect(bufrw *bufio.ReadWriter, recv chan TimestampedMessag
 			//fmt.Printf("client side hjConn close\n")
 			message.CreatedTime = (time.Now()).Unix()
 			message.Value = "clientClose"
-			message.MessageType = "clientClose"
+			message.Type = "clientClose"
 			recv <- message
 		}
 	}
