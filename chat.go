@@ -115,9 +115,8 @@ var testPageHTML = `<!DOCTYPE html>
                 },
                 complete: function(){
                     //console.log('close conn', join_time);
-                    setTimeout(function() {
-                    	pp.presence.join(comm_id);
-                    }, 100);
+                    var func = "pp.presence.join('" + comm_id + "')";
+                    setTimeout(func, 100);
                 },
                 timeout: 20000
             });
