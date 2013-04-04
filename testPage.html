@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chat Room</title>
+    <script type="text/javascript" src="./jquery.js"></script>
+    <script type="text/javascript">
+        var pp = pp || {};
+        pp.presence = pp.presence || {};
+        pp.presence.domain = "";
+        pp.counter = 0;
+        pp.clientId = Math.round((new Date()).getTime() / 1000);
+        pp.presence.join = function(comm_id) {
+            var join_time = Math.round((new Date()).getTime() / 1000);
+            var server_comm_id = comm_id + "_" + pp.clientId.toString();
+            $.ajax({
+                type: 'POST',
+                dataType: 'json',
+                data: {'comm_id': server_comm_id, 'join_time': join_time, 'group_id': 123},
+                url: pp.presence.domain + '/subscribe/message/',
+                success: function(res){
+                    console.log(typeof res);
+                    console.log(res);
+                    var ele = '<li>' + res.Value + '&nbsp;|&nbsp;' + res.Type +'</li>'
+                    $('.log').append($(ele));
+                },
+                complete: function(){
+                    //console.log('close conn', join_time);
+                    var func = "pp.presence.join('" + comm_id + "')";
+                    setTimeout(func, 100);
+                },
+                timeout: 20000
+            });
+        };
+        pp.presence.send_msg = function(comm_id, msg) {
+        	pp.counter = pp.counter + 1;
+            console.log(pp.counter);
+        	msg = msg + " " + pp.counter
+            $.ajax({
+                type: 'POST',
+                data: {'comm_id': comm_id, 'group_id': 123, 'msg': msg},
+                url: pp.presence.domain + '/send/message/',
+                success: function(res){
+                	var x = 1;
+                },
+                timeout: 5000
+            });
+        };
+        pp.presence.getAllOnlineUsers = function(comm_id) {
+        	var server_comm_id = comm_id + "_" + pp.clientId.toString();
+        	$.ajax({
+                type: 'POST',
+                dataType: 'text/html',
+                data: {'comm_id': server_comm_id, 'group_id': 123},
+                url: pp.presence.domain + '/get/onlineUsers/',
+                success: function(res){
+                    console.log(res);
+                },
+                timeout: 20000
+            });
+        };
+        $("#join_chat").live('click', function(event){
+            pp.presence.join($("#user_id").val());
+            pp.presence.getAllOnlineUsers($("#user_id").val());
+        });
+        $("#send_msg").live('click', function(event){
+            pp.presence.send_msg($("#recv_id").val(), $("#recv_msg").val());
+        });
+    </script>
+</head>
+<body>
+    <form>
+        <ul>
+        <li>
+            <label>User ID:</label>
+            <input id="user_id" type="text">
+            <input id="join_chat" value="Join Chat!" type="button">
+        </li>
+        <li>
+            <label>Recepient User ID:</label>
+            <input id="recv_id" type="text">
+            <label>Message:</label>
+            <input id="recv_msg" type="text">
+            <input id="send_msg" value="Send Message!" type="button">
+        </li>
+        </ul>
+        <div>Log:<ul class="log"></ul></div>
+    </form>
+</body>
+</html>
