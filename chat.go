@@ -27,6 +27,8 @@ import (
 	//"reflect"
 )
 
+const serverTimeout int64 = 45
+
 type TimestampedMessage struct {
 	CreatedTime int64
 	Value interface{}
@@ -36,9 +38,10 @@ type TimestampedMessage struct {
 type commEntity struct {
 	id   string
 	recv chan TimestampedMessage
-	groupId string
-	//status string
-	lastActiveSince int64
+	group_id string
+	status string
+	onlineSince int64
+	offlineSince int64
 }
 
 type ConcurrentUsersMap struct {
@@ -52,17 +55,27 @@ func (u ConcurrentUsersMap) Get(comm_id string) commEntity {
 	return u.m[comm_id]
 }
 
-func (u ConcurrentUsersMap) GetUserCommEntities(prefix_id string, group_id string) []commEntity {
-	var userCommEntities []commEntity
+func (u ConcurrentUsersMap) GetUserCommEntities(prefix_id string) (userCommEntities []commEntity) {
 	prefix_id = prefix_id + "_"
 	u.mu.RLock()
 	defer u.mu.RUnlock()
 	for _, userCommEntity := range u.m {
-		if userCommEntity.groupId == group_id && strings.Contains(userCommEntity.id, prefix_id) {
+		if strings.Contains(userCommEntity.id, prefix_id) {
 			userCommEntities = append(userCommEntities, userCommEntity)
 		}
 	}
-	return userCommEntities
+	return
+}
+
+func (u ConcurrentUsersMap) GetAllGroupUsers(group_id string) (groupCommEntities []commEntity) {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	for _, userCommEntity := range u.m {
+		if userCommEntity.group_id == group_id {
+			groupCommEntities = append(groupCommEntities, userCommEntity)
+		}
+	}
+	return
 }
 
 func (u ConcurrentUsersMap) Set(comm_id string, value commEntity) {
@@ -117,24 +130,32 @@ func jquery(w http.ResponseWriter, req *http.Request) {
 	io.WriteString(w, string(resourceData))
 }
 
+func writeMessageUser(comm_id string, message TimestampedMessage) {
+	recepientUser := users.Get(comm_id)
+	if userActive(recepientUser) {
+		recepientUser.recv <- message
+	}
+	// else - write to DB ?
+}
+
 func getAllOnlineUsers(requestingCommId string, group_id string) {
 	var message TimestampedMessage
 	var onlineUsers []string
-	
-	users.mu.RLock()
-	for _, userCommEntity := range users.m {
-		if userCommEntity.groupId == group_id && userCommEntity.id != requestingCommId && userActive(userCommEntity.lastActiveSince) {
-			onlineUsers = append(onlineUsers, userCommEntity.id)
-		}
-	}
-	users.mu.RUnlock()
+
 	exists := users.Contains(requestingCommId)
 	if exists {
-		requestingUser := users.Get(requestingCommId)
+		groupCommEntities := users.GetAllGroupUsers(group_id)
+		for _, cEntity := range groupCommEntities {
+			if userActive(cEntity) {
+				if cEntity.id != requestingCommId {
+					onlineUsers = append(onlineUsers, cEntity.id)
+				}
+			}
+		}
 		message.Value = onlineUsers
 		message.CreatedTime = (time.Now()).Unix()
 		message.Type = "allpresence"
-		requestingUser.recv <- message
+		writeMessageUser(requestingCommId, message)
 	}
 }
 
@@ -148,11 +169,19 @@ func fetchAllOnlineUsers(w http.ResponseWriter, req *http.Request) {
 	io.WriteString(w, "success")
 }
 
-func userActive(lastActiveSince int64) (active bool) {
+func userActive(cEntity commEntity) (active bool) {
 	currentUnixTime := (time.Now()).Unix()
 	active = false
-	if currentUnixTime - lastActiveSince < 4 {
+	
+	if cEntity.status == "active" {
 		active = true
+	} else {
+		curr_off := currentUnixTime - cEntity.offlineSince
+		on_off := cEntity.onlineSince - cEntity.offlineSince
+		if curr_off < serverTimeout && on_off < 5 {
+			active = true
+		} 
+		fmt.Printf("Offline -- %s = %d = %d\n\n", cEntity.id, curr_off, on_off)	
 	}
 	return
 }
@@ -180,12 +209,12 @@ func sendMessage(w http.ResponseWriter, req *http.Request) {
 	message.Value = req.FormValue("msg")
 	message.CreatedTime = (time.Now()).Unix()
 	message.Type = "chat"
-	cEntities := users.GetUserCommEntities(comm_id_prefix, group_id)
+	cEntities := users.GetUserCommEntities(comm_id_prefix)
 	//fmt.Printf("===== %v \n%T \n%#v =====\n", cEntities, cEntities, cEntities)
 	for _, cEntity := range cEntities {
-		//if userActive(cEntity.lastActiveSince) {
-		cEntity.recv <- message
-		//}
+		if cEntity.group_id == group_id {
+			writeMessageUser(cEntity.id, message)
+		}
 	}
 
 	io.WriteString(w, response)
@@ -196,7 +225,6 @@ func sendMessage(w http.ResponseWriter, req *http.Request) {
 
 func openPushChannel(comm_id string, group_id string, join_time string) chan TimestampedMessage {
 	var newUser commEntity
-	var tempUser commEntity
 	var userRecvChannel chan TimestampedMessage
 	//var tempTime time.Time
 
@@ -206,8 +234,9 @@ func openPushChannel(comm_id string, group_id string, join_time string) chan Tim
 	if exists {
 		fmt.Printf("Already joined> User-id:%v %v\n", comm_id, join_time)
 		// work around for bug http://code.google.com/p/go/issues/detail?id=3117
-		tempUser = users.Get(comm_id)
-		tempUser.lastActiveSince = currentUnixTime
+		tempUser := users.Get(comm_id)
+		tempUser.onlineSince = currentUnixTime
+		tempUser.status = "active"
 		users.Set(comm_id, tempUser)
 		tempoUser := users.Get(comm_id)
 		userRecvChannel = tempoUser.recv
@@ -215,49 +244,50 @@ func openPushChannel(comm_id string, group_id string, join_time string) chan Tim
 		fmt.Printf("New join> User-id:%v %v\n", comm_id, join_time)
 		newUser.id = comm_id
 		newUser.recv = make(chan TimestampedMessage, 100)
-		newUser.lastActiveSince = currentUnixTime
-		newUser.groupId = group_id
+		newUser.onlineSince = currentUnixTime
+		newUser.offlineSince = currentUnixTime - 3
+		newUser.status = "active"
+		newUser.group_id = group_id
 		
 		users.Set(newUser.id, newUser)
 		userRecvChannel = newUser.recv
+		// notify all users of the group about the new user
+		go notifyUserActiveToGroup(comm_id, group_id)
 	}
-	// notify all users of the group about the new user
-	//go notifyUserActiveToGroup(comm_id, group_id)
 	return userRecvChannel
 }
 
 func notifyUserActiveToGroup(comm_id string, group_id string) {
 	var message TimestampedMessage
 	var newUser []string = []string{comm_id}
-	users.mu.RLock()
-	defer users.mu.RUnlock()
-	for _, userCommEntity := range users.m {
-		if userCommEntity.groupId == group_id && userCommEntity.id != comm_id && userActive(userCommEntity.lastActiveSince) {
+	
+	groupCommEntities := users.GetAllGroupUsers(group_id)
+	for _, cEntity := range groupCommEntities {
+		if cEntity.id != comm_id {
 			message.Value = newUser
 			message.CreatedTime = (time.Now()).Unix()
 			message.Type = "presence"
-			userCommEntity.recv <- message
+			writeMessageUser(cEntity.id, message)
 		}
 	}
 }
 
 func notifyUserOfflineToGroup(comm_id string, group_id string) {
 	var message TimestampedMessage
-	var newUser []string = []string{comm_id}
+	var offlineUser []string = []string{comm_id}
 	
 	timeout := time.After(2 * time.Second)
 	select {
 	case <-timeout:
-		userCommEntity := users.Get(comm_id)
-		if !userActive(userCommEntity.lastActiveSince) {
-			users.mu.RLock()
-			defer users.mu.RUnlock()
-			for _, userCommEntity := range users.m {
-				if userCommEntity.groupId == group_id && userCommEntity.id != comm_id {
-					message.Value = newUser
+		offlineCommEntity := users.Get(comm_id)
+		if !userActive(offlineCommEntity) {
+			groupCommEntities := users.GetAllGroupUsers(group_id)
+			for _, cEntity := range groupCommEntities {
+				if cEntity.id != comm_id {
+					message.Value = offlineUser
 					message.CreatedTime = (time.Now()).Unix()
 					message.Type = "offpresence"
-					userCommEntity.recv <- message
+					writeMessageUser(cEntity.id, message)
 				}
 			}
 		}
@@ -265,7 +295,7 @@ func notifyUserOfflineToGroup(comm_id string, group_id string) {
 }
 
 func getMessage(recv chan TimestampedMessage) (msg TimestampedMessage) {
-	timeout := time.After(60 * time.Second)
+	timeout := time.After(time.Duration(serverTimeout) * time.Second)
 	select {
 		case newMessage := <-recv:
 			msg = newMessage
@@ -275,6 +305,13 @@ func getMessage(recv chan TimestampedMessage) (msg TimestampedMessage) {
 			msg.Type = "serverTimeout"
 	}
 	return msg
+}
+
+func setCommEntityInactive(comm_id string) {
+	cEntity := users.Get(comm_id)
+	cEntity.status = "inactive"
+	cEntity.offlineSince = (time.Now()).Unix()
+	users.Set(comm_id, cEntity)
 }
 
 func subscribeMessage(w http.ResponseWriter, req *http.Request) {
@@ -343,7 +380,8 @@ func notifyClientDisconnect(bufrw *bufio.ReadWriter, recv chan TimestampedMessag
 			message.Type = "clientClose"
 			recv <- message
 		}
-		go notifyUserOfflineToGroup(comm_id, group_id)
+		setCommEntityInactive(comm_id)
+		//go notifyUserOfflineToGroup(comm_id, group_id)
 	}
 }
 
