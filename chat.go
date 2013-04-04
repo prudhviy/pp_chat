@@ -117,6 +117,26 @@ func jquery(w http.ResponseWriter, req *http.Request) {
 	io.WriteString(w, string(resourceData))
 }
 
+func getAllOnlineUsers(requestingCommId string, group_id string) {
+	var message TimestampedMessage
+	var onlineUsers []string
+	
+	users.mu.RLock()
+	for _, userCommEntity := range users.m {
+		if userCommEntity.groupId == group_id && userCommEntity.id != requestingCommId && userActive(userCommEntity.lastActiveSince) {
+			onlineUsers = append(onlineUsers, userCommEntity.id)
+		}
+	}
+	users.mu.RUnlock()
+	exists := users.Contains(requestingCommId)
+	if exists {
+		requestingUser := users.Get(requestingCommId)
+		message.Value = onlineUsers
+		message.CreatedTime = (time.Now()).Unix()
+		message.Type = "allpresence"
+		requestingUser.recv <- message
+	}
+}
 
 func fetchAllOnlineUsers(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
@@ -144,27 +164,6 @@ func messageActive(createdTime int64) (active bool) {
 		active = true
 	}
 	return
-}
-
-func getAllOnlineUsers(requestingCommId string, group_id string) {
-	var message TimestampedMessage
-	var onlineUsers []string
-	
-	users.mu.RLock()
-	for _, userCommEntity := range users.m {
-		if userCommEntity.groupId == group_id && userCommEntity.id != requestingCommId && userActive(userCommEntity.lastActiveSince) {
-			onlineUsers = append(onlineUsers, userCommEntity.id)
-		}
-	}
-	users.mu.RUnlock()
-	exists := users.Contains(requestingCommId)
-	if exists {
-		requestingUser := users.Get(requestingCommId)
-		message.Value = onlineUsers
-		message.CreatedTime = (time.Now()).Unix()
-		message.Type = "allpresence"
-		requestingUser.recv <- message
-	}
 }
 
 func sendMessage(w http.ResponseWriter, req *http.Request) {
