@@ -192,8 +192,9 @@ func userActive(cEntity commEntity) (active bool) {
 				active = true
 			}
 		}
-		fmt.Printf("Offline -- %s = %d = %d\n\n", cEntity.id, onOffdiff, currOffDiff)	
+		//fmt.Printf("Offline -- %v %s = %d = %d\n", active, cEntity.id, onOffdiff, currOffDiff)	
 	}
+	//fmt.Printf("Online status %v '%s'\n", active, cEntity.status)
 	return
 }
 
@@ -234,7 +235,7 @@ func sendMessage(w http.ResponseWriter, req *http.Request) {
 	}*/
 }
 
-func openPushChannel(comm_id string, group_id string, join_time string) chan TimestampedMessage {
+func openPushChannel(comm_id string, group_id string) chan TimestampedMessage {
 	var newUser commEntity
 	var userRecvChannel chan TimestampedMessage
 	//var tempTime time.Time
@@ -243,7 +244,7 @@ func openPushChannel(comm_id string, group_id string, join_time string) chan Tim
 	
 	exists := users.Contains(comm_id)
 	if exists {
-		fmt.Printf("Already joined> User-id:%v %v\n", comm_id, join_time)
+		fmt.Printf("Already joined> User-id:%v \n", comm_id)
 		// work around for bug http://code.google.com/p/go/issues/detail?id=3117
 		tempUser := users.Get(comm_id)
 		tempUser.onlineSince = currentUnixTime
@@ -253,7 +254,7 @@ func openPushChannel(comm_id string, group_id string, join_time string) chan Tim
 		tempoUser := users.Get(comm_id)
 		userRecvChannel = tempoUser.recv
 	} else {
-		fmt.Printf("New join> User-id:%v %v\n", comm_id, join_time)
+		fmt.Printf("New join> User-id:%v \n", comm_id)
 		newUser.id = comm_id
 		newUser.recv = make(chan TimestampedMessage, 100)
 		newUser.onlineSince = currentUnixTime
@@ -289,18 +290,20 @@ func notifyUserOfflineToGroup(comm_id string, group_id string) {
 	var message TimestampedMessage
 	var offlineUser []string = []string{comm_id}
 	prefix_clientId := strings.Split(comm_id, "_")
-	prefix_id := prefix_clientId[0] + "_"
+	prefix_id := prefix_clientId[0]
 	timeout := time.After(3 * time.Second)
 	select {
 	case <-timeout:
-		offlineCommEntity := users.GetUserCommEntities(prefix_id)
-
-
-		incomplete
-
-
-
-		if !userActive(offlineCommEntity) {
+		cUserEntities := users.GetUserCommEntities(prefix_id)
+		active := false
+		for _, cUserEntity := range cUserEntities {
+			if userActive(cUserEntity) {
+				active = true
+				break
+			}
+		}
+		//fmt.Printf("@User %s is %v %v\n", prefix_id, active, cUserEntities)
+		if !active {
 			groupCommEntities := users.GetAllGroupUsers(group_id)
 			for _, cEntity := range groupCommEntities {
 				if cEntity.id != comm_id {
@@ -336,7 +339,7 @@ func setCommEntityInactive(comm_id string) {
 }
 
 func subscribeMessage(w http.ResponseWriter, req *http.Request) {
-	recv := openPushChannel(req.FormValue("comm_id"), req.FormValue("group_id"), req.FormValue("join_time"))
+	recv := openPushChannel(req.FormValue("comm_id"), req.FormValue("group_id"))
 
 	hjConn, bufrw := httpHijack(w)
 	defer hjConn.Close()
@@ -363,7 +366,7 @@ func subscribeMessage(w http.ResponseWriter, req *http.Request) {
 	if messageActive(newMessage.CreatedTime) {
 		marshalData, _ := json.Marshal(newMessage)
 		jsonResponse := string(marshalData)
-		fmt.Printf("json: %s \n", jsonResponse)
+		fmt.Printf("\tjson: %s \n", jsonResponse)
 		// write body 
 		bufrw.WriteString(jsonResponse + "\r\n")
 		bufrw.Flush()
@@ -402,7 +405,7 @@ func notifyClientDisconnect(bufrw *bufio.ReadWriter, recv chan TimestampedMessag
 			recv <- message
 		}
 		setCommEntityInactive(comm_id)
-		go notifyUserOfflineToGroup(comm_id, group_id)
+		notifyUserOfflineToGroup(comm_id, group_id)
 	}
 }
 
