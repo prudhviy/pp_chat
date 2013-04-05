@@ -42,6 +42,7 @@ type commEntity struct {
 	status string
 	onlineSince int64
 	offlineSince int64
+	onOffDiff int64
 }
 
 type ConcurrentUsersMap struct {
@@ -141,13 +142,14 @@ func writeMessageUser(comm_id string, message TimestampedMessage) {
 func getAllOnlineUsers(requestingCommId string, group_id string) {
 	var message TimestampedMessage
 	var onlineUsers []string
-
+	prefix_clientId := strings.Split(requestingCommId, "_")
+	prefix_id := prefix_clientId[0] + "_"
 	exists := users.Contains(requestingCommId)
 	if exists {
 		groupCommEntities := users.GetAllGroupUsers(group_id)
 		for _, cEntity := range groupCommEntities {
 			if userActive(cEntity) {
-				if cEntity.id != requestingCommId {
+				if !strings.Contains(cEntity.id, prefix_id) {
 					onlineUsers = append(onlineUsers, cEntity.id)
 				}
 			}
@@ -172,16 +174,25 @@ func fetchAllOnlineUsers(w http.ResponseWriter, req *http.Request) {
 func userActive(cEntity commEntity) (active bool) {
 	currentUnixTime := (time.Now()).Unix()
 	active = false
-	
+	users.mu.Lock()
+	defer users.mu.Unlock()
 	if cEntity.status == "active" {
 		active = true
 	} else {
-		curr_off := currentUnixTime - cEntity.offlineSince
-		on_off := cEntity.onlineSince - cEntity.offlineSince
-		if curr_off < serverTimeout && on_off < 5 {
-			active = true
-		} 
-		fmt.Printf("Offline -- %s = %d = %d\n\n", cEntity.id, curr_off, on_off)	
+		onOffdiff := cEntity.onOffDiff - (2 * cEntity.onOffDiff)
+		currOffDiff := currentUnixTime - cEntity.offlineSince
+		// when status is 'inactive', onOffDiff should be between 0 & serverTimeout
+		// Reason: since its inactive, last event is offline.
+		if 0 < onOffdiff && onOffdiff < serverTimeout {
+			// currOffDiff should be < 3. Reason: two cases -
+			// 1. conn is closed and client is connecting back(within few seconds gap)
+			// 2. conn is closed and client is not connecting back at all
+			// if its connecting back it will definetely connect back in less than 3
+			if currOffDiff < 3 {
+				active = true
+			}
+		}
+		fmt.Printf("Offline -- %s = %d = %d\n\n", cEntity.id, onOffdiff, currOffDiff)	
 	}
 	return
 }
@@ -236,6 +247,7 @@ func openPushChannel(comm_id string, group_id string, join_time string) chan Tim
 		// work around for bug http://code.google.com/p/go/issues/detail?id=3117
 		tempUser := users.Get(comm_id)
 		tempUser.onlineSince = currentUnixTime
+		tempUser.onOffDiff = tempUser.onlineSince - tempUser.offlineSince
 		tempUser.status = "active"
 		users.Set(comm_id, tempUser)
 		tempoUser := users.Get(comm_id)
@@ -246,6 +258,7 @@ func openPushChannel(comm_id string, group_id string, join_time string) chan Tim
 		newUser.recv = make(chan TimestampedMessage, 100)
 		newUser.onlineSince = currentUnixTime
 		newUser.offlineSince = currentUnixTime - 3
+		newUser.onOffDiff = newUser.onlineSince - newUser.offlineSince
 		newUser.status = "active"
 		newUser.group_id = group_id
 		
@@ -275,11 +288,18 @@ func notifyUserActiveToGroup(comm_id string, group_id string) {
 func notifyUserOfflineToGroup(comm_id string, group_id string) {
 	var message TimestampedMessage
 	var offlineUser []string = []string{comm_id}
-	
-	timeout := time.After(2 * time.Second)
+	prefix_clientId := strings.Split(comm_id, "_")
+	prefix_id := prefix_clientId[0] + "_"
+	timeout := time.After(3 * time.Second)
 	select {
 	case <-timeout:
-		offlineCommEntity := users.Get(comm_id)
+		offlineCommEntity := users.GetUserCommEntities(prefix_id)
+
+
+		incomplete
+
+
+
 		if !userActive(offlineCommEntity) {
 			groupCommEntities := users.GetAllGroupUsers(group_id)
 			for _, cEntity := range groupCommEntities {
@@ -295,7 +315,7 @@ func notifyUserOfflineToGroup(comm_id string, group_id string) {
 }
 
 func getMessage(recv chan TimestampedMessage) (msg TimestampedMessage) {
-	timeout := time.After(time.Duration(serverTimeout) * time.Second)
+	timeout := time.After(45 * time.Second)
 	select {
 		case newMessage := <-recv:
 			msg = newMessage
@@ -311,6 +331,7 @@ func setCommEntityInactive(comm_id string) {
 	cEntity := users.Get(comm_id)
 	cEntity.status = "inactive"
 	cEntity.offlineSince = (time.Now()).Unix()
+	cEntity.onOffDiff = cEntity.onlineSince - cEntity.offlineSince
 	users.Set(comm_id, cEntity)
 }
 
@@ -381,7 +402,7 @@ func notifyClientDisconnect(bufrw *bufio.ReadWriter, recv chan TimestampedMessag
 			recv <- message
 		}
 		setCommEntityInactive(comm_id)
-		//go notifyUserOfflineToGroup(comm_id, group_id)
+		go notifyUserOfflineToGroup(comm_id, group_id)
 	}
 }
 
