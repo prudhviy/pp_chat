@@ -284,10 +284,11 @@ func openPushChannel(comm_id string, group_id string) chan TimestampedMessage {
 func notifyUserActiveToGroup(comm_id string, group_id string) {
 	var message TimestampedMessage
 	var newUser []string = []string{comm_id}
-	
+	prefix_clientId := strings.Split(comm_id, "_")
+	prefix_id := prefix_clientId[0] + "_"
 	groupCommEntities := users.GetAllGroupUsers(group_id)
 	for _, cEntity := range groupCommEntities {
-		if cEntity.id != comm_id {
+		if !strings.Contains(cEntity.id, prefix_id) {
 			message.Value = newUser
 			message.CreatedTime = (time.Now()).Unix()
 			message.Type = "presence"
@@ -327,15 +328,19 @@ func notifyUserOfflineToGroup(comm_id string, group_id string) {
 	}
 }
 
-func getMessage(recv chan TimestampedMessage) (msg TimestampedMessage) {
+func getMessage(recv chan TimestampedMessage, hjConnChan chan TimestampedMessage) (msg TimestampedMessage) {
 	timeout := time.After(45 * time.Second)
 	select {
 		case newMessage := <-recv:
 			msg = newMessage
-		case <-timeout:
+		case <- timeout:
 			msg.CreatedTime = (time.Now()).Unix()
 			msg.Value = "serverTimeout"
 			msg.Type = "serverTimeout"
+		case <- hjConnChan:
+			msg.CreatedTime = (time.Now()).Unix()
+			msg.Value = "clientClose"
+			msg.Type = "clientClose"
 	}
 	return msg
 }
@@ -355,7 +360,7 @@ func subscribeMessage(w http.ResponseWriter, req *http.Request) {
 	hjConn, bufrw := httpHijack(w)
 	defer hjConn.Close()
 	go notifyClientDisconnect(bufrw, hjConnChan, req.FormValue("comm_id"), req.FormValue("group_id"), req.FormValue("join_time"))
-	newMessage := getMessage(recv)
+	newMessage := getMessage(recv, hjConnChan)
 
 	buildHTTPResponse(bufrw)
 
