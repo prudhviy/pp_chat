@@ -9,6 +9,7 @@
         pp.presence.domain = "";
         pp.counter = 0;
         pp.clientId = Math.round((new Date()).getTime() / 1000);
+        pp.presence.send_busy = false;
         pp.presence.join = function(comm_id) {
             var join_time = Math.round((new Date()).getTime() / 1000);
             var server_comm_id = comm_id + "_" + pp.clientId.toString();
@@ -26,12 +27,15 @@
                 complete: function(){
                     //console.log('close conn', join_time);
                     var func = "pp.presence.join('" + comm_id + "')";
-                    setTimeout(func, 100);
+                    setTimeout(func, 250);
                 },
                 timeout: 40000
             });
         };
         pp.presence.send_msg = function(comm_id, msg) {
+            if(pp.presence.send_busy) {
+                return;
+            }
         	pp.counter = pp.counter + 1;
             console.log(pp.counter);
         	msg = msg + " " + pp.counter
@@ -39,8 +43,14 @@
                 type: 'POST',
                 data: {'comm_id': comm_id, 'group_id': 123, 'msg': msg},
                 url: pp.presence.domain + '/send/message/',
+                beforeSend: function(jqXHR, settings) {
+                    pp.presence.send_busy = true;
+                },
                 success: function(res){
                 	var x = 1;
+                },
+                complete: function(){
+                    pp.presence.send_busy = false;
                 },
                 timeout: 5000
             });
@@ -49,7 +59,7 @@
         	var server_comm_id = comm_id + "_" + pp.clientId.toString();
         	$.ajax({
                 type: 'POST',
-                dataType: 'text/html',
+                dataType: 'json',
                 data: {'comm_id': server_comm_id, 'group_id': 123},
                 url: pp.presence.domain + '/get/onlineUsers/',
                 success: function(res){

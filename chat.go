@@ -28,11 +28,12 @@ import (
 )
 
 const serverTimeout int64 = 45
+const allowedOnOffDiff int64 = 3
 
 type TimestampedMessage struct {
-	CreatedTime int64
-	Value interface{}
 	Type string
+	Value interface{}
+	CreatedTime int64
 }
 
 type commEntity struct {
@@ -162,13 +163,19 @@ func getAllOnlineUsers(requestingCommId string, group_id string) {
 }
 
 func fetchAllOnlineUsers(w http.ResponseWriter, req *http.Request) {
+	var message TimestampedMessage
 	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Content-Type", "text/html; charset=iso-8859-1")
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	go getAllOnlineUsers(req.FormValue("comm_id"), req.FormValue("group_id"))
 
-	io.WriteString(w, "success")
+	message.CreatedTime = (time.Now()).Unix()
+	message.Value = "success"
+	message.Type = "success"
+	marshalData, _ := json.Marshal(message)
+	jsonResponse := string(marshalData)
+	io.WriteString(w, jsonResponse)
 }
 
 func userActive(cEntity commEntity) (active bool) {
@@ -183,16 +190,16 @@ func userActive(cEntity commEntity) (active bool) {
 		currOffDiff := currentUnixTime - cEntity.offlineSince
 		// when status is 'inactive', onOffDiff should be between 0 & serverTimeout
 		// Reason: since its inactive, last event is offline.
-		if 0 < onOffdiff && onOffdiff < serverTimeout {
+		if 0 <= onOffdiff && onOffdiff <= serverTimeout {
 			// currOffDiff should be < 3. Reason: two cases -
 			// 1. conn is closed and client is connecting back(within few seconds gap)
 			// 2. conn is closed and client is not connecting back at all
 			// if its connecting back it will definetely connect back in less than 3
-			if currOffDiff < 3 {
+			if currOffDiff < allowedOnOffDiff {
 				active = true
 			}
 		}
-		//fmt.Printf("Offline -- %v %s = %d = %d\n", active, cEntity.id, onOffdiff, currOffDiff)	
+		fmt.Printf("Online -- %v %s = %d = %d\n", active, cEntity.id, onOffdiff, currOffDiff)	
 	}
 	//fmt.Printf("Online status %v '%s'\n", active, cEntity.status)
 	return
@@ -244,7 +251,7 @@ func openPushChannel(comm_id string, group_id string) chan TimestampedMessage {
 	
 	exists := users.Contains(comm_id)
 	if exists {
-		fmt.Printf("Already joined> User-id:%v \n", comm_id)
+		//fmt.Printf("Already joined> User-id:%v \n", comm_id)
 		// work around for bug http://code.google.com/p/go/issues/detail?id=3117
 		tempUser := users.Get(comm_id)
 		tempUser.onlineSince = currentUnixTime
@@ -253,6 +260,9 @@ func openPushChannel(comm_id string, group_id string) chan TimestampedMessage {
 		users.Set(comm_id, tempUser)
 		tempoUser := users.Get(comm_id)
 		userRecvChannel = tempoUser.recv
+		if tempUser.onOffDiff > allowedOnOffDiff {
+			go notifyUserActiveToGroup(comm_id, group_id)	
+		}
 	} else {
 		fmt.Printf("New join> User-id:%v \n", comm_id)
 		newUser.id = comm_id
@@ -339,11 +349,12 @@ func setCommEntityInactive(comm_id string) {
 }
 
 func subscribeMessage(w http.ResponseWriter, req *http.Request) {
-	recv := openPushChannel(req.FormValue("comm_id"), req.FormValue("group_id"))
+	var hjConnChan chan TimestampedMessage = make(chan TimestampedMessage, 1)
 
+	recv := openPushChannel(req.FormValue("comm_id"), req.FormValue("group_id"))
 	hjConn, bufrw := httpHijack(w)
 	defer hjConn.Close()
-	go notifyClientDisconnect(bufrw, recv, req.FormValue("comm_id"), req.FormValue("group_id"))
+	go notifyClientDisconnect(bufrw, hjConnChan, req.FormValue("comm_id"), req.FormValue("group_id"), req.FormValue("join_time"))
 	newMessage := getMessage(recv)
 
 	buildHTTPResponse(bufrw)
@@ -388,7 +399,7 @@ func buildHTTPResponse(bufrw *bufio.ReadWriter) {
 	bufrw.WriteString("\n")
 }
 
-func notifyClientDisconnect(bufrw *bufio.ReadWriter, recv chan TimestampedMessage, comm_id string, group_id string) {
+func notifyClientDisconnect(bufrw *bufio.ReadWriter, hjConnChan chan TimestampedMessage, comm_id string, group_id string, join_time string) {
 	var message TimestampedMessage
 
 	// listen if client has closed the connection
@@ -396,13 +407,13 @@ func notifyClientDisconnect(bufrw *bufio.ReadWriter, recv chan TimestampedMessag
 	if len(bs) == 0 && err != nil {
 		//fmt.Printf("error: %v %T %#v\n", err, err, err)
 		if _, ok := err.(*net.OpError); ok {
-			fmt.Printf("server side hjConn close\n")
+			fmt.Printf("Server closed conn> User-id:%s %s\n", comm_id, join_time)
 		} else {
 			//fmt.Printf("client side hjConn close\n")
 			message.CreatedTime = (time.Now()).Unix()
 			message.Value = "clientClose"
 			message.Type = "clientClose"
-			recv <- message
+			hjConnChan <- message
 		}
 		setCommEntityInactive(comm_id)
 		notifyUserOfflineToGroup(comm_id, group_id)
