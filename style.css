@@ -1,0 +1,134 @@
+body{
+	margin: 0px auto;
+	padding: 0px;
+	font-family: Tahoma, Helvetica, Arial, Sans-Serif;
+	background-color: #DDDEDC;
+}
+
+#head-section{
+	margin: 0px auto;
+	padding: 0px;
+	height: 80px;
+	background-color: #149971;
+}
+
+#head-content{
+	margin: 0px auto;
+	padding: 0px 0px;
+	height: 80px;
+	width: 80%;
+}
+
+#head-content>h3{
+	margin: 0px auto;
+	padding: 0px 0px;
+	padding-top: 5px;
+	font-size: 55px;
+	font-weight: normal;
+	color: #79BA8E;	
+	float: left;
+}
+
+#uid{
+	float: right;
+	padding-top: 27px;
+}
+
+#main-content{
+	margin: 0px auto;
+	padding: 0px 0px;
+	width: 80%;
+	padding-top: 20px;
+}
+
+form{
+	margin: 0px auto;
+	padding: 0px 0px;
+}
+
+ul{
+	margin: 0px auto;
+	padding: 0px 0px;
+}
+
+li{
+	margin: 0px auto;
+	padding: 0px 0px;
+	padding-left: 100px;
+	padding-bottom: 15px;
+	list-style-type: none;
+}
+
+label {
+	float: left;
+	text-align: right;
+	margin-right: 12px;
+	width: 150px;
+	padding: 4px;
+}
+
+input[type="text"]{
+	padding: 6px;
+	padding-right: 0px;
+	font-size: 15px;
+	color: gray;
+	outline: none;
+	border: none;
+	box-shadow: inset 0px 0px 8px  rgba(0,0,0,0.1);
+}
+
+input#user_id{
+	border-top-left-radius: 5px;
+	border-bottom-left-radius: 5px;
+}
+
+input#recv_msg{
+	border-radius: 5px;
+}
+
+input#recv_msg:focus{
+	border: 5px solid yellow;
+}
+
+textarea{
+	border-radius: 5px;
+	padding: 6px;
+	font-size: 15px;
+	color: gray;
+	outline: none;
+	border: none;
+	resize: vertical;
+	width: 400px;
+	height: 70px;
+}
+
+input[type="button"]{
+	margin: 0px auto;
+	padding: 0px 0px;
+	border: none;
+	outline: none;
+	font-size: 13px;
+	background-color: #E0A51B;
+	color: white;
+	font-weight: bold;
+}
+
+input#join_chat{
+	width: 75px;
+	height: 30px;
+	border-top-right-radius: 15px;
+	border-bottom-right-radius: 15px;
+}
+
+input#send_msg{
+	width: 75px;
+	height: 75px;
+	position: relative;
+	top: -37px;
+	border-top-right-radius: 50%;
+	border-bottom-right-radius: 50%;
+}
+
+.clearfloat{
+	clear: both;
+}
