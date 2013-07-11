@@ -132,6 +132,19 @@ func jquery(w http.ResponseWriter, req *http.Request) {
 	io.WriteString(w, string(resourceData))
 }
 
+func cssStyle(w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Content-Type", "text/css; charset=utf-8")
+
+	resourceData, err := ioutil.ReadFile("./style.css")
+	if err != nil {
+		fmt.Printf("###\nError - %s\n###\n", err)
+		os.Exit(1)
+	}
+
+	io.WriteString(w, string(resourceData))
+}
+
 func writeMessageUser(comm_id string, message TimestampedMessage) {
 	recepientUser := users.Get(comm_id)
 	if userActive(recepientUser) {
@@ -448,6 +461,7 @@ func main() {
 		"http://0.0.0.0:8000 on %d CPU cores\n", *numCores)
 	http.HandleFunc("/", testPage)
 	http.HandleFunc("/jquery.js", jquery)
+	http.HandleFunc("/style.css", cssStyle)
 	http.HandleFunc("/subscribe/message/", subscribeMessage)
 	http.HandleFunc("/send/message/", sendMessage)
 	http.HandleFunc("/get/onlineUsers/", fetchAllOnlineUsers)

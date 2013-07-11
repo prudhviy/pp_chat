@@ -1,7 +1,9 @@
+
 <!DOCTYPE html>
 <html>
 <head>
     <title>Chat Room</title>
+    <link rel="stylesheet" type="text/css" href="style.css">
     <script type="text/javascript" src="./jquery.js"></script>
     <script type="text/javascript">
         var pp = pp || {};
@@ -36,9 +38,9 @@
             if(pp.presence.send_busy) {
                 return;
             }
-        	pp.counter = pp.counter + 1;
+            pp.counter = pp.counter + 1;
             console.log(pp.counter);
-        	msg = msg + " " + pp.counter
+            msg = msg + " " + pp.counter
             $.ajax({
                 type: 'POST',
                 data: {'comm_id': comm_id, 'group_id': 123, 'msg': msg},
@@ -47,7 +49,7 @@
                     pp.presence.send_busy = true;
                 },
                 success: function(res){
-                	var x = 1;
+                    var x = 1;
                 },
                 complete: function(){
                     pp.presence.send_busy = false;
@@ -56,8 +58,8 @@
             });
         };
         pp.presence.getAllOnlineUsers = function(comm_id) {
-        	var server_comm_id = comm_id + "_" + pp.clientId.toString();
-        	$.ajax({
+            var server_comm_id = comm_id + "_" + pp.clientId.toString();
+            $.ajax({
                 type: 'POST',
                 dataType: 'json',
                 data: {'comm_id': server_comm_id, 'group_id': 123},
@@ -78,22 +80,35 @@
     </script>
 </head>
 <body>
-    <form>
-        <ul>
-        <li>
-            <label>User ID:</label>
-            <input id="user_id" type="text">
-            <input id="join_chat" value="Join Chat!" type="button">
-        </li>
-        <li>
-            <label>Recepient User ID:</label>
-            <input id="recv_id" type="text">
-            <label>Message:</label>
-            <input id="recv_msg" type="text">
-            <input id="send_msg" value="Send Message!" type="button">
-        </li>
-        </ul>
-        <div>Log:<ul class="log"></ul></div>
-    </form>
+    <div id="head-section">
+        <div id="head-content">
+            <h3>chat room</h3>
+            <div id="uid">
+                <label>User ID:</label>
+                <input id="user_id" type="text">
+                <input id="join_chat" value="Join Chat!" type="button">
+            </div> 
+            <div class="clearfloat"></div>
+        </div>        
+    </div>
+    <div id="main-content">
+        <form>
+            <ul>
+                <li>
+                    <label>Recepient User ID:</label>
+                    <input id="recv_id" type="text">
+                    <div class="clearfloat"></div>
+                </li>
+                <li>
+                    <label>Message:</label>
+                    <textarea id="recv_msg" type="text"></textarea>
+                    <input id="send_msg" value="Send!" type="button">
+                    <div class="clearfloat"></div>
+                </li>
+            </ul>
+            <div>Log:<ul class="log"></ul></div>
+        </form>
+    </div>
+
 </body>
 </html>
