@@ -458,7 +458,7 @@ func main() {
 	flag.Parse()
 	runtime.GOMAXPROCS(*numCores)
 	fmt.Printf("\nPresence server running at "+
-		"http://0.0.0.0:8088 on %d CPU cores\n", *numCores)
+		"http://127.0.0.1:8088 on %d CPU cores\n", *numCores)
 	http.HandleFunc("/", testPage)
 	http.HandleFunc("/jquery.js", jquery)
 	http.HandleFunc("/style.css", cssStyle)
@@ -466,7 +466,7 @@ func main() {
 	http.HandleFunc("/send/message/", sendMessage)
 	http.HandleFunc("/get/onlineUsers/", fetchAllOnlineUsers)
 
-	err := http.ListenAndServe("0.0.0.0:8088", nil)
+	err := http.ListenAndServe("127.0.0.1:8088", nil)
 	if err != nil {
 		log.Fatal("In main(): ", err)
 	}
