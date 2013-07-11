@@ -452,7 +452,7 @@ func main() {
 	http.HandleFunc("/send/message/", sendMessage)
 	http.HandleFunc("/get/onlineUsers/", fetchAllOnlineUsers)
 
-	err := http.ListenAndServe("0.0.0.0:8000", nil)
+	err := http.ListenAndServe("0.0.0.0:8008", nil)
 	if err != nil {
 		log.Fatal("In main(): ", err)
 	}
