@@ -3,9 +3,9 @@ package main
 import (
 	"time"
 
+	"bufio"
 	"io"
 	"io/ioutil"
-	"bufio"
 	//"bytes"
 	"net"
 	"net/http"
@@ -16,14 +16,14 @@ import (
 	//"hash"
 
 	//"html/template"
-	"log"
-	"fmt"
-	"strings"
 	"encoding/json"
+	"fmt"
+	"log"
+	"strings"
 	//"encoding/hex"
 
-	"runtime"
 	"flag"
+	"runtime"
 	//"reflect"
 )
 
@@ -31,24 +31,24 @@ const serverTimeout int64 = 45
 const allowedOnOffDiff int64 = 3
 
 type TimestampedMessage struct {
-	Type string
-	Value interface{}
+	Type        string
+	Value       interface{}
 	CreatedTime int64
 }
 
 type commEntity struct {
-	id   string
-	recv chan TimestampedMessage
-	group_id string
-	status string
-	onlineSince int64
+	id           string
+	recv         chan TimestampedMessage
+	group_id     string
+	status       string
+	onlineSince  int64
 	offlineSince int64
-	onOffDiff int64
+	onOffDiff    int64
 }
 
 type ConcurrentUsersMap struct {
 	mu sync.RWMutex
-	m map[string]commEntity
+	m  map[string]commEntity
 }
 
 func (u ConcurrentUsersMap) Get(comm_id string) commEntity {
@@ -212,7 +212,7 @@ func userActive(cEntity commEntity) (active bool) {
 				active = true
 			}
 		}
-		fmt.Printf("Online -- %v %s = %d = %d\n", active, cEntity.id, onOffdiff, currOffDiff)	
+		fmt.Printf("Online -- %v %s = %d = %d\n", active, cEntity.id, onOffdiff, currOffDiff)
 	}
 	//fmt.Printf("Online status %v '%s'\n", active, cEntity.status)
 	return
@@ -221,7 +221,7 @@ func userActive(cEntity commEntity) (active bool) {
 func messageActive(createdTime int64) (active bool) {
 	currentUnixTime := (time.Now()).Unix()
 	active = false
-	if currentUnixTime - createdTime < 15 {
+	if currentUnixTime-createdTime < 15 {
 		active = true
 	}
 	return
@@ -261,7 +261,7 @@ func openPushChannel(comm_id string, group_id string) chan TimestampedMessage {
 	//var tempTime time.Time
 
 	currentUnixTime := (time.Now()).Unix()
-	
+
 	exists := users.Contains(comm_id)
 	if exists {
 		//fmt.Printf("Already joined> User-id:%v \n", comm_id)
@@ -274,7 +274,7 @@ func openPushChannel(comm_id string, group_id string) chan TimestampedMessage {
 		tempoUser := users.Get(comm_id)
 		userRecvChannel = tempoUser.recv
 		if tempUser.onOffDiff > allowedOnOffDiff {
-			go notifyUserActiveToGroup(comm_id, group_id)	
+			go notifyUserActiveToGroup(comm_id, group_id)
 		}
 	} else {
 		fmt.Printf("New join> User-id:%v \n", comm_id)
@@ -285,7 +285,7 @@ func openPushChannel(comm_id string, group_id string) chan TimestampedMessage {
 		newUser.onOffDiff = newUser.onlineSince - newUser.offlineSince
 		newUser.status = "active"
 		newUser.group_id = group_id
-		
+
 		users.Set(newUser.id, newUser)
 		userRecvChannel = newUser.recv
 		// notify all users of the group about the new user
@@ -344,16 +344,16 @@ func notifyUserOfflineToGroup(comm_id string, group_id string) {
 func getMessage(recv chan TimestampedMessage, hjConnChan chan TimestampedMessage) (msg TimestampedMessage) {
 	timeout := time.After(45 * time.Second)
 	select {
-		case newMessage := <-recv:
-			msg = newMessage
-		case <- timeout:
-			msg.CreatedTime = (time.Now()).Unix()
-			msg.Value = "serverTimeout"
-			msg.Type = "serverTimeout"
-		case <- hjConnChan:
-			msg.CreatedTime = (time.Now()).Unix()
-			msg.Value = "clientClose"
-			msg.Type = "clientClose"
+	case newMessage := <-recv:
+		msg = newMessage
+	case <-timeout:
+		msg.CreatedTime = (time.Now()).Unix()
+		msg.Value = "serverTimeout"
+		msg.Type = "serverTimeout"
+	case <-hjConnChan:
+		msg.CreatedTime = (time.Now()).Unix()
+		msg.Value = "clientClose"
+		msg.Type = "clientClose"
 	}
 	return msg
 }
@@ -379,18 +379,18 @@ func subscribeMessage(w http.ResponseWriter, req *http.Request) {
 
 	if newMessage.Type == "serverTimeout" {
 		fmt.Printf("Server timed out> User-id:%s %s \n",
-					req.FormValue("comm_id"),
-					req.FormValue("join_time"))
+			req.FormValue("comm_id"),
+			req.FormValue("join_time"))
 	} else if newMessage.Type == "clientClose" {
 		fmt.Printf("Client closed conn> User-id:%s %s \n",
-					req.FormValue("comm_id"),
-					req.FormValue("join_time"))
+			req.FormValue("comm_id"),
+			req.FormValue("join_time"))
 	} else if newMessage.Type == "presence" {
 		fmt.Printf("Presence Message sent to> User-id:%s %s %s\n", req.FormValue("comm_id"),
-						req.FormValue("join_time"), newMessage.Value)
+			req.FormValue("join_time"), newMessage.Value)
 	} else if newMessage.Type == "chat" {
 		fmt.Printf("Message sent to> User-id:%s %s %s\n", req.FormValue("comm_id"),
-						req.FormValue("join_time"), newMessage.Value)
+			req.FormValue("join_time"), newMessage.Value)
 	}
 	if messageActive(newMessage.CreatedTime) {
 		marshalData, _ := json.Marshal(newMessage)
